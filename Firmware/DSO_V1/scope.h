@@ -1,0 +1,78 @@
+#ifndef SCOPE_H
+#define SCOPE_H
+
+#define REG_INDEX   _SFR_IO8(0x3C) //(*(volatile uint8_t*)0x81)
+#define REG_CHA     _SFR_IO8(0x13)
+#define REG_CHB     _SFR_IO8(0x14)
+#define REG_CHC     _SFR_IO8(0x15)
+#define REG_TRIG    _SFR_IO8(0x35)
+
+#define REG_BASETIME        _SFR_IO8(0x14)
+#define REG_TRIGGER_LEVEL   _SFR_IO8(0x13)
+#define REG_TRIGGER_MODE    _SFR_IO8(0x15)
+
+#define TRIG_CTRL_REG  REG_CHC   // TRIG CONTROL
+#define TRIG_CTRL_BIT  7         // il bit che sblocca wr_ptr
+
+
+#define PRE_TRIGGER       150
+#define POST_TRIGGER      150
+#define BUFFER_TOTAL      (PRE_TRIGGER + POST_TRIGGER)
+#define READY_BIT         1
+#define BUFFER_SIZE       4096
+#define DISPLAY_SAMPLES   255
+#define PAN_LIMIT         140   
+#define PAN_STEP          4
+
+// Buffer interni
+extern uint8_t buffer_a[BUFFER_TOTAL];
+extern uint8_t buffer_b[BUFFER_TOTAL];
+extern uint8_t buffer_c[BUFFER_TOTAL];
+
+// Modalità trigger
+typedef enum {
+    TRIG_MODE_AUTO = 0,
+    TRIG_MODE_NORMAL = 1,
+    TRIG_MODE_SINGLE = 2
+} trigger_mode_t;
+
+// Canale trigger
+typedef enum {
+    TRIG_CHAN_A = 0,
+    TRIG_CHAN_B = 1,
+    TRIG_CHAN_C = 2
+} trig_channel_t;
+
+typedef enum {
+    OSC_NOT_READY = 0,
+    OSC_READY     = 1,
+    OSC_TIMEOUT   = 2
+} osc_status_t;
+
+typedef enum {
+    TRIG_SLOPE_RISING  = 0,
+    TRIG_SLOPE_FALLING = 1
+} trig_slope_t;
+
+typedef enum {
+    T_DIV  = 0,
+    PAN = 1
+} tdiv_pan_t;
+
+
+
+// Funzioni di inizializzazione
+//void osc_init_base_time(uint32_t base_time);
+void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,
+                      trig_channel_t chan, uint8_t edge_rising);
+
+// Funzione per acquisizione dati (gestisce pre/post trigger)
+//void osc_acquire_samples(void);
+
+// Funzione di visualizzazione
+//void osc_draw_samples(void);
+
+void scope_main(void);
+
+
+#endif

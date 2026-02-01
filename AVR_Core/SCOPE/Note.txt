@@ -1,0 +1,263 @@
+Definizione finale MMIO
+Registro	Lettura	Scrittura	Note / Uso
+REG_INDEX	Indice corrente buffer	Imposta indice buffer	0…BUFFER_SIZE-1
+REG_CHA	Valore CH_A (ADC)	Base tempi (4 byte)	Scrittura 32 bit
+REG_CHB	Valore CH_B (ADC)	Livello trigger (10 bit)	Scrittura 16 bit, MSB = bit 9
+REG_CHC	Valore CH_C (ADC)	Libero / a discrezione	Possiamo usare scrittura 32 bit per configurazioni extra
+REG_TRIG	-	Modalità trigger + opzioni	[7:6]=modalità (00=AUTO, 01=NORMAL, 10=SINGLE), [5:0]=extra/rearme
+
+Note aggiuntive
+
+REG_INDEX → C usa questo registro per leggere i buffer (autoincremento implementato lato C).
+
+REG_CHA → base tempi 4 byte (32 bit), utile per variare la velocità di campionamento.
+
+REG_CHB → trigger level 10 bit, lettura ADC o configurazione trigger.
+
+REG_CHC → possibilità di scrivere parametri extra, ad esempio offset DC o modalità visualizzazione.
+
+REG_TRIG → gestione modalità trigger, bit rearme opzionale.
+
+1️⃣ Buffer
+
+Dimensione: 1024 punti per canale (CHA, CHB, CHC).
+
+Memoria circolare.
+
+Pre-trigger: metà buffer prima del trigger, metà dopo.
+
+Lato C: autoincremento dell’indice per leggere i dati.
+
+2️⃣ Registri MMIO
+Registro	Lettura	Scrittura	Note / Uso
+REG_INDEX	Buffer corrente	Imposta indice buffer	0…1023
+REG_CHA	Valore CH_A (ADC)	Base tempi (4 byte)	Velocità di campionamento
+REG_CHB	Valore CH_B (ADC)	Livello trigger (10 bit)	16 bit scrittura
+REG_CHC	Valore CH_C (ADC)	Libero	32 bit scrittura, riservato
+REG_TRIG	-	Modalità trigger + extra	[7:6]=modalità (00=AUTO, 01=NORMAL, 10=SINGLE), [5:0]=bit rearme / opzioni
+3️⃣ Modalità trigger
+
+AUTO: cattura continuo, buffer circolare, trigger index aggiornato continuamente.
+
+NORMAL: cattura solo quando trigger scatta, poi stop fino al nuovo trigger.
+
+SINGLE: cattura un solo evento trigger, poi stop fino a rearme (bit in REG_TRIG).
+
+Nota: il trigger si confronta sul canale CHA, con livello configurato in REG_CHB (10 bit).
+
+4️⃣ FSM gestione trigger / buffer
+
+Stati principali:
+
+IDLE → attende trigger o modalità AUTO
+
+CAPTURE → scrive buffer, aggiorna write_index
+
+WAIT_REARME → solo SINGLE, attende bit rearme in REG_TRIG
+
+Transizioni:
+
+AUTO: IDLE → CAPTURE → CAPTURE (buffer circolare)
+
+NORMAL: IDLE → CAPTURE → IDLE (dopo completamento metà buffer post-trigger)
+
+SINGLE: IDLE → CAPTURE → WAIT_REARME → IDLE
+
+write_index = indice corrente di scrittura nel buffer.
+
+trig_index = indice del trigger (start della metà post-trigger).
+
+5️⃣ Lettura lato C
+
+Si imposta REG_INDEX = trig_index
+
+Si legge REG_CHA/B/C in sequenza, autoincrementando indice modulo 1024
+
+Possibilità di leggere numero arbitrario di punti (es. 300 punti partendo dal trigger).
+
+                ┌──────────────────────────┐
+ADC_CHA ───────▶│                          │
+ADC_CHB ───────▶│   BUFFER WRITE MODULE    │──┐
+ADC_CHC ───────▶│  (RAM circolare 3ch)     │  │
+                │                          │  │
+                │  - write_enable          │  │
+                │  - write_index           │  │
+                └──────────────────────────┘  │
+                                               │
+                                               ▼
+                                   ┌──────────────────┐
+                                   │  BUFFER MEMORY   │
+                                   │  CHA / CHB / CHC │
+                                   │  1024 samples    │
+                                   └──────────────────┘
+                                               ▲
+                                               │
+                ┌──────────────────────────┐  │
+ADC_CHA ───────▶│     TRIGGER MODULE        │──┘
+                │                          │
+REG_CHB(level)▶│  - comparatore livello    │
+                │  - edge detect            │
+                │  - trigger_event          │
+                └──────────────────────────┘
+                           │
+                           ▼
+                ┌──────────────────────────┐
+                │        FSM CONTROL        │
+REG_TRIG(mode)▶│                          │
+REG_TRIG(rearm)│  Stati:                  │
+                │  IDLE                    │
+                │  PRE_TRIGGER             │
+                │  POST_TRIGGER            │
+                │  WAIT_REARME              │
+                │                          │
+                │  Output:                 │
+                │  - write_enable          │
+                │  - trig_index            │
+                │  - stop_capture          │
+                └──────────────────────────┘
+
+        ┌──────────────────────────┐
+        │        MMIO INTERFACE     │
+        │                          │
+        │ REG_INDEX → read index   │
+        │ REG_CHA   → read CHA     │
+        │ REG_CHB   → read CHB     │
+        │ REG_CHC   → read CHC     │
+        │ REG_TRIG  → control      │
+        └──────────────────────────┘
+
+
+FSM OSCILLOSCOPIO – DEFINIZIONE FORMALE
+Parametri fissi
+
+BUFFER_SIZE = 1024
+
+PRE_TRIGGER = 150
+
+POST_TRIGGER = 150
+
+FRAME_SIZE = 300
+
+Segnali usati dalla FSM
+Ingressi
+
+mode[1:0]
+
+00 = AUTO
+
+01 = NORMAL
+
+10 = SINGLE
+
+trigger_event → impulso 1 clk dal Trigger Module
+
+rearm → bit da REG_TRIG
+
+rst_n
+
+Uscite
+
+buf_we → abilita scrittura buffer
+
+trig_index → indice iniziale frame
+
+capture_done → frame valido (flag di stato)
+
+write_enable → alias di buf_we
+
+Indici interni FSM
+
+write_index → indice RAM circolare
+
+post_cnt → contatore post-trigger (0 → 149)
+
+STATI FSM
+RESET
+IDLE
+RUN_PRE
+RUN_POST
+HOLD
+
+FSM OSCILLOSCOPIO – DEFINIZIONE FORMALISSIMA
+Stati
+Stato	Scopo principale	Comportamento
+RESET	Inizializzazione sicura	- buffer fermo
+- write_enable = 0
+- trigger disarmato
+- FRAME_DONE = 0
+IDLE	Attesa modalità o trigger	- buffer fermo
+- trigger armato
+- READY ad iniziare RUN_PRE
+- FRAME_DONE = 0
+RUN_PRE	Pre-trigger attivo	- buffer scrive continuamente
+- mantieni PRE_TRIGGER samples
+- AUTO continua sempre
+- NORMAL/SINGLE aspetta trigger_event
+TRIGGERED (opzionale intermedio)	Rilevato trigger	- registra trig_index
+- set TRIGGERED = 1
+- prepara post_cnt = 0
+- transizione immediata → RUN_POST
+RUN_POST	Post-trigger	- buffer scrive POST_TRIGGER samples
+- contatore post_cnt incrementa
+- al completamento:
+  - AUTO → RUN_PRE
+  - NORMAL → IDLE
+  - SINGLE → HOLD
+HOLD	Congela buffer (SINGLE)	- buffer fermo
+- CAPTURE_ACTIVE = 0
+- attende rearme (bit REG_TRIG)
+IDLE_AFTER_FRAME (opzionale per NORMAL)	Frame completato, pronto per nuovo trigger	- buffer fermo
+- FRAME_DONE = 1
+- post_cnt = 0
+Note operative
+
+Trigger
+
+Solo RUN_PRE → RUN_POST
+
+AUTO ignora trigger
+
+NORMAL / SINGLE → trigger_event valido solo se armato
+
+Pre-trigger / Post-trigger
+
+Pre-trigger sempre mantenuto da buffer circolare
+
+Post-trigger sempre contati esattamente
+
+SINGOLO FRAME vs Continuità
+
+AUTO: loop infinito RUN_PRE → RUN_POST → RUN_PRE
+
+NORMAL: IDLE_AFTER_FRAME → attesa nuovo trigger
+
+SINGLE: HOLD → attesa rearme
+
+Segnali principali pilotati dalla FSM
+
+write_enable → buffer scrive / fermo
+
+wr_ptr → indice di scrittura
+
+trig_index → indice del trigger
+
+FRAME_DONE → buffer pronto per il C
+
+CAPTURE_ACTIVE → scrittura attiva o ferma
+
+TRIGGERED → evento trigger avvenuto
+
+POST_TRIGGER → indica fase post-trigger
+
+HOLD_ACTIVE → SINGLE freeze
+
+Transizioni concettuali
+RESET -> IDLE
+IDLE -> RUN_PRE
+RUN_PRE -> TRIGGERED (trigger_event)
+TRIGGERED -> RUN_POST
+RUN_POST -> HOLD (SINGLE)
+RUN_POST -> IDLE_AFTER_FRAME (NORMAL)
+RUN_POST -> RUN_PRE (AUTO)
+HOLD -> IDLE (rearme)
+IDLE_AFTER_FRAME -> RUN_PRE (nuovo trigger)

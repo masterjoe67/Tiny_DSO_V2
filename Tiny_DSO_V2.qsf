@@ -1,0 +1,189 @@
+# -------------------------------------------------------------------------- #
+#
+# Copyright (C) 2022  Intel Corporation. All rights reserved.
+# Your use of Intel Corporation's design tools, logic functions 
+# and other software and tools, and any partner logic 
+# functions, and any output files from any of the foregoing 
+# (including device programming or simulation files), and any 
+# associated documentation or information are expressly subject 
+# to the terms and conditions of the Intel Program License 
+# Subscription Agreement, the Intel Quartus Prime License Agreement,
+# the Intel FPGA IP License Agreement, or other applicable license
+# agreement, including, without limitation, that your use is for
+# the sole purpose of programming logic devices manufactured by
+# Intel and sold by Intel or its authorized distributors.  Please
+# refer to the applicable agreement for further details, at
+# https://fpgasoftware.intel.com/eula.
+#
+# -------------------------------------------------------------------------- #
+#
+# Quartus Prime
+# Version 22.1std.0 Build 915 10/25/2022 SC Standard Edition
+# Date created = 22:21:53  January 31, 2026
+#
+# -------------------------------------------------------------------------- #
+#
+# Notes:
+#
+# 1) The default values for assignments are stored in the file:
+#		Tiny_DSO_V2_assignment_defaults.qdf
+#    If this file doesn't exist, see file:
+#		assignment_defaults.qdf
+#
+# 2) Intel recommends that you do not modify this file. This
+#    file is updated automatically by the Quartus Prime software
+#    and any changes you make may be lost or overwritten.
+#
+# -------------------------------------------------------------------------- #
+
+
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE22F17C6
+set_global_assignment -name TOP_LEVEL_ENTITY Tiny_DSO_V2_top
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 22.1STD.0
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:21:53  JANUARY 31, 2026"
+set_global_assignment -name LAST_QUARTUS_VERSION "22.1std.0 Standard Edition"
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 1
+set_global_assignment -name NOMINAL_CORE_SUPPLY_VOLTAGE 1.2V
+set_global_assignment -name EDA_SIMULATION_TOOL "Questa Intel FPGA (VHDL)"
+set_global_assignment -name EDA_TIME_SCALE "1 ps" -section_id eda_simulation
+set_global_assignment -name EDA_OUTPUT_DATA_FORMAT VHDL -section_id eda_simulation
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_timing
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_symbol
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_signal_integrity
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_boundary_scan
+set_location_assignment PIN_R8 -to CLOCK_50
+set_location_assignment PIN_J15 -to KEY[0]
+set_location_assignment PIN_B1 -to LED[6]
+set_location_assignment PIN_F2 -to I2C_SCLK
+set_location_assignment PIN_F1 -to I2C_SDAT
+set_location_assignment PIN_B4 -to RX
+set_location_assignment PIN_B5 -to TX
+set_location_assignment PIN_A6 -to PWM_A_H
+set_location_assignment PIN_D6 -to PWM_A_L
+set_location_assignment PIN_C6 -to PWM_B_H
+set_location_assignment PIN_E6 -to PWM_B_L
+set_location_assignment PIN_D8 -to PWM_C_H
+set_location_assignment PIN_F8 -to PWM_C_L
+set_location_assignment PIN_P11 -to porta[1]
+set_location_assignment PIN_N12 -to porta[2]
+set_location_assignment PIN_N9 -to porta[3]
+set_location_assignment PIN_L16 -to porta[4]
+set_location_assignment PIN_R16 -to porta[5]
+set_location_assignment PIN_P15 -to porta[6]
+set_location_assignment PIN_R14 -to porta[7]
+set_location_assignment PIN_T10 -to porta[0]
+set_location_assignment PIN_T11 -to MISO
+set_location_assignment PIN_T12 -to MOSI
+set_location_assignment PIN_T13 -to SCK
+set_location_assignment PIN_T15 -to SS
+set_location_assignment PIN_R11 -to portb[0]
+set_location_assignment PIN_R10 -to portb[1]
+set_location_assignment PIN_P9 -to portb[2]
+set_location_assignment PIN_N11 -to portb[3]
+set_location_assignment PIN_K16 -to portb[4]
+set_location_assignment PIN_L15 -to portb[5]
+set_location_assignment PIN_P16 -to portb[6]
+set_location_assignment PIN_N16 -to portb[7]
+set_location_assignment PIN_A5 -to button
+set_location_assignment PIN_A15 -to LED[0]
+set_location_assignment PIN_L3 -to LED[7]
+set_location_assignment PIN_A11 -to LED[3]
+set_location_assignment PIN_B13 -to LED[2]
+set_location_assignment PIN_A13 -to LED[1]
+set_location_assignment PIN_D1 -to LED[4]
+set_location_assignment PIN_F3 -to LED[5]
+set_location_assignment PIN_A12 -to ENC_A
+set_location_assignment PIN_D12 -to ENC_B
+set_location_assignment PIN_F13 -to INT0
+set_location_assignment PIN_B10 -to ADC_mosi
+set_location_assignment PIN_B14 -to ADC_sclk
+set_location_assignment PIN_A10 -to ADC_cs_n
+set_location_assignment PIN_A9 -to ADC_miso
+set_location_assignment PIN_E8 -to KEY_ROWS[1]
+set_location_assignment PIN_E7 -to KEY_ROWS[2]
+set_location_assignment PIN_C8 -to KEY_ROWS[3]
+set_location_assignment PIN_A7 -to KEY_ROWS[4]
+set_location_assignment PIN_F9 -to KEY_ROWS[0]
+set_location_assignment PIN_B6 -to KEY_COLS[1]
+set_location_assignment PIN_A5 -to KEY_COLS[2]
+set_location_assignment PIN_B7 -to KEY_COLS[0]
+set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
+set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
+set_global_assignment -name VHDL_SHOW_LMF_MAPPING_MESSAGES OFF
+set_location_assignment PIN_T14 -to out100Hz
+set_global_assignment -name VHDL_FILE count100Hz.vhd
+set_global_assignment -name QIP_FILE count100Hz.qip
+set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/RAMAdrDcd.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/MemRdMux.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/ArbiterAndMux.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/Resync16b_TCK.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/Resync1b_TCK.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/Resync1b_cp2.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/OCDProgTCK.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/OCDProgcp2.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGTAPCtrlSMPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGProgrammerPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGOCDPrgTop.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGDataPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGCompPack.vhd
+set_global_assignment -name QIP_FILE AVR_Core/Memory/rom16kx16.qip
+set_global_assignment -name SOURCE_FILE AVR_Core/Memory/rom16kx16.cmp
+set_global_assignment -name VHDL_FILE AVR_Core/Memory/dm16kx8.vhd
+set_global_assignment -name QIP_FILE AVR_Core/Memory/dm16kx8.qip
+set_global_assignment -name SOURCE_FILE AVR_Core/Memory/dm16kx8.cmp
+set_global_assignment -name VHDL_FILE AVR_Core/Memory/XPM16Kx16.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Memory/XDM16Kx8.vhd
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/fast_adders/StandAdder.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/fast_adders/CLA16B4x4S.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/fast_adders/CLA16B2x8S.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/fast_adders/CLA16B1x16S.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/fast_adders/CLA16B.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/fast_adders/Adder.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/multiplier/mul8x8comb.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/multiplier/avr_mul.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/alu_avr.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/io_reg_file.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/io_adr_dec.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/bit_processor.v
+set_global_assignment -name VHDL_FILE AVR_Core/Core/AVR_Core_CompPack.vhd
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/reg_file.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/pm_fetch_dec.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Core/avr_core.v
+set_global_assignment -name VHDL_FILE AVR_Core/SCOPE/ram_dual_4096x12.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/SCOPE/oscilloscope_top.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/SCOPE/adc128s022_reader.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/uart.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/Timer_Counter.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/SynchronizerLatch.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/SynchronizerDFF.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/SynchronizerCompPack.vhd
+set_global_assignment -name VERILOG_FILE AVR_Core/Peripheral/spi_mod.v
+set_global_assignment -name VERILOG_FILE AVR_Core/Peripheral/rsnc_bit.v
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/portx.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/mmio_encoder.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/keypad_5x3.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/MemAccessCtrlPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/MemAccessCompPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/Memory/XMemCompPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/CommonPacks/SynthCtrlPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/CommonPacks/AVRuCPackage.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/uC/top_avr_core_v8.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/uC/ResetGenerator.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/uC/RAMDataReg.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/uC/external_mux.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/uC/BusMastCompPack.vhd
+set_global_assignment -name VHDL_FILE AVR_Core/uC/AVR_uC_CompPack.vhd
+set_global_assignment -name QIP_FILE PLL/PLL_Master.qip
+set_global_assignment -name VHDL_FILE Tiny_DSO_V2_top.vhd
+set_global_assignment -name VHDL_FILE SignalSource/sin_Source.vhd
+set_global_assignment -name VHDL_FILE SignalSource/triangleSource.vhd
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
