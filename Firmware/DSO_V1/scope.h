@@ -1,3 +1,4 @@
+#include <avr/io.h>
 #ifndef SCOPE_H
 #define SCOPE_H
 
@@ -15,14 +16,38 @@
 #define TRIG_CTRL_BIT  7         // il bit che sblocca wr_ptr
 
 
-#define PRE_TRIGGER       150
-#define POST_TRIGGER      150
+#define PRE_TRIGGER       200
+#define POST_TRIGGER      200
 #define BUFFER_TOTAL      (PRE_TRIGGER + POST_TRIGGER)
 #define READY_BIT         1
 #define BUFFER_SIZE       4096
 #define DISPLAY_SAMPLES   255
 #define PAN_LIMIT         140   
 #define PAN_STEP          4
+
+#define TRACE_W 400
+#define TRACE_H 240
+#define MARGIN_X 5
+#define MARGIN_Y 25
+#define SIDEBAR_X (MARGIN_X + TRACE_W + 5)
+
+#define MENU_NONE       0
+#define MENU_CH1        1
+#define MENU_CH2        2
+#define MENU_TRIG       3
+
+#define COUPL_DC  0
+#define COUPL_AC  1
+#define COUPL_GND 2
+
+// Encoder mode
+#define MODE_NONE 0
+#define MODE_Y_POS 1
+#define MODE_TRIG_LEVEL 2
+
+extern uint16_t _width;
+extern uint16_t _height;
+extern uint8_t  _rotation;
 
 // Buffer interni
 extern uint8_t buffer_a[BUFFER_TOTAL];
@@ -39,8 +64,7 @@ typedef enum {
 // Canale trigger
 typedef enum {
     TRIG_CHAN_A = 0,
-    TRIG_CHAN_B = 1,
-    TRIG_CHAN_C = 2
+    TRIG_CHAN_B = 1
 } trig_channel_t;
 
 typedef enum {

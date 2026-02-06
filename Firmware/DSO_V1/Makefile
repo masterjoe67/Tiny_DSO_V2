@@ -11,12 +11,13 @@ F_CPU     = 40000000UL
 # --- ELENCO FILE SORGENTE ---
 # aggiungi qui i tuoi file .c
 SRCS = main.c \
-       ili9341.c\
+       Peripheral/st7798.c\
 	   Peripheral/uart.c\
 	   Peripheral/leds.c\
 	   Peripheral/input.c\
-	   glcdfont.c\
 	   scope.c
+#glcdfont.c
+#scope.c
 	   
 
 

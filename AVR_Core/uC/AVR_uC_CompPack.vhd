@@ -375,6 +375,27 @@ component oscilloscope_top is
     );
 end component;
 
+component st7796_fast_ctrl is
+    port (
+        clk         : in  std_logic;    -- 40MHz
+		  clk_spi     : in  std_logic;
+        rst_n       : in  std_logic;
+        -- Interfaccia Bus AVR
+        adr         : in  std_logic_vector(IOAdrWidth-1 downto 0);
+        dbus_in     : in  std_logic_vector(7 downto 0);
+        dbus_out    : out std_logic_vector(7 downto 0);
+        iore        : in  std_logic;
+        iowe        : in  std_logic;
+		  out_en      : out std_logic;    -- Attivazione driver bus dati
+        -- Pin Fisici Display
+        tft_sclk    : out std_logic;
+        tft_mosi    : out std_logic;
+        tft_cs      : out std_logic;
+        tft_dc      : out std_logic;
+        tft_rst     : out std_logic
+    );
+end component;
+
 
 
 end AVR_uC_CompPack;

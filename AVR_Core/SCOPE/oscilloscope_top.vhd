@@ -68,7 +68,7 @@ architecture rtl of oscilloscope_top is
     ------------------------------------------------------------------
     constant BUFFER_SIZE      : integer := 4096;
 	 constant PTR_BITS         : integer := 12;
-    constant PRE_TRIGGER      : integer := 150;
+    constant PRE_TRIGGER      : integer := 200;
     constant POST_TRIGGER_LEN : integer := 255;
     constant AUTO_TIMEOUT     : unsigned(15 downto 0) := to_unsigned(2050, 16);
 	 constant PAN_LIMIT : integer := BUFFER_SIZE/2;

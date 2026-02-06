@@ -104,10 +104,10 @@ constant MCUSR_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16
 constant XDIV_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#3C#);
 -- End of service module
 
--- SPI
-constant SPDR_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0F#);
-constant SPSR_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0E#);
-constant SPCR_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0D#);
+-- FAST SPI 
+constant LCD_DATA_REG  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0D#); -- Ex SPDR
+constant LCD_STATUS_REG: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0E#); -- Ex SPSR
+constant LCD_CTRL_REG  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0F#); -- Ex SPCR
 -- End of SPI
 
 -- PORTA addresses 

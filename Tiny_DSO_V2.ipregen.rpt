@@ -1,5 +1,5 @@
 IP Upgrade report for Tiny_DSO_V2
-Sat Jan 31 23:59:05 2026
+Tue Feb  3 20:48:41 2026
 Quartus Prime Version 22.1std.0 Build 915 10/25/2022 SC Standard Edition
 
 
@@ -35,7 +35,7 @@ https://fpgasoftware.intel.com/eula.
 +-----------------------------------------------------------------------------------+
 ; IP Upgrade Summary                                                                ;
 +------------------------------+----------------------------------------------------+
-; IP Components Upgrade Status ; Failed - Sat Jan 31 23:59:05 2026                  ;
+; IP Components Upgrade Status ; Failed - Tue Feb  3 20:48:41 2026                  ;
 ; Quartus Prime Version        ; 22.1std.0 Build 915 10/25/2022 SC Standard Edition ;
 ; Revision Name                ; Tiny_DSO_V2                                        ;
 ; Top-level Entity Name        ; Tiny_DSO_V2_top                                    ;
@@ -48,9 +48,9 @@ https://fpgasoftware.intel.com/eula.
 +---------------------+
 Info (23030): Evaluation of Tcl script c:/intelfpga/22.1std/quartus/common/tcl/internal/ip_regen/ip_regen.tcl was successful
 Info: Quartus Prime Shell was successful. 0 errors, 0 warnings
-    Info: Peak virtual memory: 4878 megabytes
-    Info: Processing ended: Sat Jan 31 23:59:05 2026
-    Info: Elapsed time: 00:00:09
-    Info: Total CPU time (on all processors): 00:00:24
+    Info: Peak virtual memory: 4886 megabytes
+    Info: Processing ended: Tue Feb  3 20:48:42 2026
+    Info: Elapsed time: 00:00:32
+    Info: Total CPU time (on all processors): 00:00:23
 
 

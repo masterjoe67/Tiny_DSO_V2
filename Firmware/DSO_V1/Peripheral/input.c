@@ -110,7 +110,7 @@ uint16_t update_param_16(uint16_t param, uint16_t min, uint16_t max, uint16_t st
 
 
 
-int16_t update_param_16_signed(int16_t param, int16_t min, int16_t max, int16_t step)
+/*int16_t update_param_16_signed(int16_t param, int16_t min, int16_t max, int16_t step)
 {
     int16_t pos = encoder_read();   // 0..1023
 
@@ -128,6 +128,35 @@ int16_t update_param_16_signed(int16_t param, int16_t min, int16_t max, int16_t 
     if(new_param > max) new_param = max;
 
     return (int16_t)new_param;
+}*/
+
+int16_t update_param_16_signed(
+    int16_t param,
+    int16_t min,
+    int16_t max,
+    int16_t step
+)
+{
+    int16_t det  = encoder_read();
+    int16_t diff = det - prev_det_signed;
+    prev_det_signed = det;
+
+    /* nessun movimento */
+    if (diff == 0)
+        return param;
+
+    /* filtro solo per glitch grossi (wrap / rumore) */
+    if (diff > 20 || diff < -20)
+        return param;
+
+    /* calcolo SEMPRE in 32 bit */
+    int32_t tmp = (int32_t)param + (int32_t)diff * (int32_t)step;
+
+    /* clamp corretto */
+    if (tmp < min) tmp = min;
+    if (tmp > max) tmp = max;
+
+    return (int16_t)tmp;
 }
 
 

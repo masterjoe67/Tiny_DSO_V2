@@ -22,6 +22,7 @@ entity top_avr_core_v8 is port(
 	nrst   : in    std_logic;
 	clk    : in    std_logic;
 	ck50   : in    std_logic;
+	clk_spi : IN STD_LOGIC;
 	-- Port 
 	porta  : inout std_logic_vector(7 downto 0);
 	portb  : inout std_logic_vector(7 downto 0);
@@ -29,10 +30,12 @@ entity top_avr_core_v8 is port(
 	-- UART 
 	rxd    : in    std_logic;
 	txd    : out   std_logic;
-	-- SPI
-	miso   : in    std_logic;	
-	mosi   : out   std_logic;
-	sck    : out   std_logic;
+	-- TFT SPI
+	tft_sclk    : out std_logic;
+	tft_mosi    : out std_logic;
+	tft_cs      : out std_logic;
+	tft_dc      : out std_logic;
+	tft_rst     : out std_logic;
 	-- External interrupts
 	INTx   : in    std_logic_vector(7 downto 0); 
 	INT0	 : in    std_logic;
@@ -279,49 +282,6 @@ signal ss_in       : std_logic;
 signal spi_enable  : std_logic;
 signal spi_master  : std_logic;
 signal spi_irq     : std_logic;
-
-component spi_mod
-  port (
-    -- Clock & reset
-    ireset      : in  std_logic;
-    cp2         : in  std_logic;
-
-    -- Bus interno
-    adr         : in  std_logic_vector(6 downto 0);
-    dbus_in     : in  std_logic_vector(7 downto 0);
-    dbus_out    : out std_logic_vector(7 downto 0);
-    iore        : in  std_logic;
-    iowe        : in  std_logic;
-    out_en      : out std_logic;
-
-    -- SPI interface
-    misoi       : in  std_logic;
-    mosii       : in  std_logic;
-    scki        : in  std_logic;
-    ss_b        : in  std_logic;
-
-    misoo       : out std_logic;
-    mosio       : out std_logic;
-    scko        : out std_logic;
-
-    -- Status
-    spe         : out std_logic;
-    spimaster   : out std_logic;
-
-    -- IRQ
-    spiirq      : out std_logic;
-    spiack      : in  std_logic;
-
-    -- Slave programming mode / optional
-    por         : in  std_logic;
-    spiextload  : in  std_logic;
-    spidwrite   : out std_logic;
-    spiload     : out std_logic
-	 
-  );
-end component;
-
-
 begin
 
 
@@ -329,71 +289,34 @@ begin
 -- Added for Synopsys compatibility
 gnd <= '0';
 vcc  <= '1';
--- Added for Synopsys compatibility	
-
---FrqDiv_Inst:component FrqDiv port map(
---                                      clk_in     => clk,
---			                          clk_out    => clk4M
---		                              );
+-- Added for Synopsys compatibility		                              );
 
 
 clk4M <= clk;
 
 core_inst <= pm_dout;	
 
---core_irqlines(0) <= not INT0;
 
---touch_int_impl : component touch_irq_fpga
---    Port map(
---        clk          => core_cp2,      -- clock FPGA
---        rst_n        => core_ireset,   -- reset attivo basso
---        penirq_in    => not INT0,          -- pin fisico PENIRQ (attivo basso)
---        int0_out     => core_irqlines(0)   -- output per core
---    );
+TFT_SPI : component st7796_fast_ctrl 
+    port map(
+        clk        => core_cp2,
+		  clk_spi    => clk_spi,
+        rst_n      => core_ireset,
+        -- Interfaccia Bus AVR
+        adr        => core_adr,
+        dbus_in    => core_dbusout,
+        dbus_out   => spi_dbusout,
+        iore       => core_iore,
+        iowe       => core_iowe,
+		  out_en     => spi_out_en,
+        -- Pin Fisici Display
+        tft_sclk   => tft_sclk,
+        tft_mosi   => tft_mosi,
+        tft_cs     => tft_cs,
+        tft_dc     => tft_dc,
+        tft_rst    => tft_rst
+    );
 
-
-
-SPI_inst : component spi_mod
-  port map (
-    -- Clock & reset
-    ireset      => core_ireset,        -- collegato al reset del top
-    cp2         => core_cp2,          -- clock principale
-
-    -- Bus interno
-    adr         => core_adr,     -- 6 bit indirizzo registri SPI
-    dbus_in     => core_dbusout,     -- 8 bit dati in scrittura
-    dbus_out    => spi_dbusout,    -- 8 bit dati letti dai registri SPI
-    iore        => core_iore,    -- read enable
-    iowe        => core_iowe,    -- write enable
-    out_en      => spi_out_en,  -- dbus_out valido
-
-    -- Interfaccia SPI fisica
-    misoi       => miso,      -- ingresso MISO
-    mosii       => mosi_in,      -- ingresso MOSI (solo slave)
-    scki        => sck_in,       -- ingresso SCK (solo slave)
-    ss_b        => ss_in,        -- ingresso SS (solo slave)
-
-    misoo       => miso_out,     -- uscita MISO
-    mosio       => mosi,     -- uscita MOSI (master)
-    scko        => sck,      -- uscita SCK
-
-    -- Stato SPI
-    spe         => spi_enable,   -- SPI abilitato
-    spimaster   => spi_master,   -- master/slave
-
-    -- IRQ
-    spiirq      => core_irqlines(16),      -- IRQ verso core
-	 spiack      => ind_irq_ack(16),
-
-
-    -- Slave programming mode / opzionali (collegati a costanti)
-    por         => '0',
-    spiextload  => '0',
-    spidwrite   => open,
-    spiload     => open
-
-  );
-  
 io_port_out(5) <= spi_dbusout;
 io_port_out_en(5) <= spi_out_en;
 		  

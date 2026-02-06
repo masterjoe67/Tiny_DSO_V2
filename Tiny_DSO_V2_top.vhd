@@ -10,18 +10,24 @@ ENTITY Tiny_DSO_V2_top IS
 	(
 		CLOCK_50 :  IN  STD_LOGIC;
 		RX :  IN  STD_LOGIC;
-		MISO :  IN  STD_LOGIC;
 		ENC_A :  IN  STD_LOGIC;
 		ENC_B :  IN  STD_LOGIC;
-		INT0 :  IN  STD_LOGIC;
-		ADC_miso :  IN  STD_LOGIC;
+
+		
 		KEY :  IN  STD_LOGIC_VECTOR(0 TO 0);
 		KEY_ROWS :  IN  STD_LOGIC_VECTOR(4 DOWNTO 0);
 		LED :  INOUT  STD_LOGIC_VECTOR(7 DOWNTO 0);
+		porta :  INOUT  STD_LOGIC_VECTOR(7 DOWNTO 0);
 		portb :  INOUT  STD_LOGIC_VECTOR(7 DOWNTO 0);
 		TX :  OUT  STD_LOGIC;
-		MOSI :  OUT  STD_LOGIC;
-		SCK :  OUT  STD_LOGIC;
+			-- TFT SPI
+		tft_sclk    : out std_logic;
+		tft_mosi    : out std_logic;
+		tft_cs      : out std_logic;
+		tft_dc      : out std_logic;
+		tft_rst     : out std_logic;
+		
+		ADC_miso :  IN  STD_LOGIC;
 		ADC_sclk :  OUT  STD_LOGIC;
 		ADC_cs_n :  OUT  STD_LOGIC;
 		ADC_mosi :  OUT  STD_LOGIC;
@@ -39,8 +45,8 @@ COMPONENT top_avr_core_v8
 	PORT(nrst : IN STD_LOGIC;
 		 clk : IN STD_LOGIC;
 		 ck50 : IN STD_LOGIC;
+		 clk_spi : IN STD_LOGIC;
 		 rxd : IN STD_LOGIC;
-		 miso : IN STD_LOGIC;
 		 INT0 : IN STD_LOGIC;
 		 TMS : IN STD_LOGIC;
 		 TCK : IN STD_LOGIC;
@@ -54,12 +60,15 @@ COMPONENT top_avr_core_v8
 		 porta : INOUT STD_LOGIC_VECTOR(7 DOWNTO 0);
 		 portb : INOUT STD_LOGIC_VECTOR(7 DOWNTO 0);
 		 txd : OUT STD_LOGIC;
-		 mosi : OUT STD_LOGIC;
-		 sck : OUT STD_LOGIC;
 		 TDO : OUT STD_LOGIC;
 		 ADC_sclk : OUT STD_LOGIC;
 		 ADC_cs_n : OUT STD_LOGIC;
 		 ADC_mosi : OUT STD_LOGIC;
+		 tft_sclk    : out std_logic;
+		 tft_mosi    : out std_logic;
+		 tft_cs      : out std_logic;
+		 tft_dc      : out std_logic;
+		 tft_rst     : out std_logic;
 
 		 key_cols : OUT STD_LOGIC_VECTOR(2 DOWNTO 0)
 	);
@@ -90,7 +99,8 @@ end COMPONENT;
 COMPONENT pll_master
 	PORT(inclk0 : IN STD_LOGIC;
 		 c0 : OUT STD_LOGIC;
-		 c1 : OUT STD_LOGIC
+		 c1 : OUT STD_LOGIC;
+		 c2 : OUT STD_LOGIC
 	);
 END COMPONENT;
 
@@ -103,14 +113,14 @@ END COMPONENT;
 
 SIGNAL	clk0 :  STD_LOGIC;
 SIGNAL	clk50 :  STD_LOGIC;
+SIGNAL	clk_spi :  STD_LOGIC;
 SIGNAL	nrst :  STD_LOGIC;
-SIGNAL	porta :  STD_LOGIC_VECTOR(7 DOWNTO 0);
 SIGNAL	rxd :  STD_LOGIC;
-SIGNAL	SYNTHESIZED_WIRE_0 :  STD_LOGIC;
+
 
 
 BEGIN 
-SYNTHESIZED_WIRE_0 <= '1';
+
 
 
 
@@ -118,18 +128,26 @@ b2v_inst : top_avr_core_v8
 PORT MAP(nrst => nrst,
 		 clk => clk0,
 		 ck50 => clk50,
+		 clk_spi => clk_spi,
 		 rxd => rxd,
-		 miso => MISO,
-		 --INT0 => SYNTHESIZED_WIRE_0,
-		 ADC_miso => ADC_miso,
+
+		 
 		 enc_a => ENC_A,
 		 enc_b => ENC_B,
 		 key_rows => KEY_ROWS,
 		 porta => porta,
 		 portb => portb,
 		 txd => TX,
-		 mosi => MOSI,
-		 sck => SCK,
+		 
+		 	-- TFT SPI
+		 tft_sclk    => tft_sclk,
+		 tft_mosi    => tft_mosi,
+		 tft_cs      => tft_cs,
+		 tft_dc      => tft_dc,
+		 tft_rst     => tft_rst,
+
+		 
+		 ADC_miso => ADC_miso,
 		 ADC_sclk => ADC_sclk,
 		 ADC_cs_n => ADC_cs_n,
 		 ADC_mosi => ADC_mosi,
@@ -146,7 +164,8 @@ PORT MAP(nrst => nrst,
 b2v_inst1 : pll_master
 PORT MAP(inclk0 => CLOCK_50,
 		 c0 => clk0,
-		 c1 => clk50);
+		 c1 => clk50,
+		 c2 => clk_spi);
 
 
 b2v_inst2 : count100hz

@@ -991,6 +991,8 @@ void drawCharGL(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t 
 #endif // LOAD_GLCD
 }
 
+
+
 /***************************************************************************************
 ** Function name:           drawChar
 ** Description:             draw a unicode onto the screen
