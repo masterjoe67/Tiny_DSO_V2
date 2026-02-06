@@ -204,7 +204,6 @@ begin
     with trig_chan_sel select
         trig_sample <= adc_a(11 downto 2) when "00",
                        adc_b(11 downto 2) when "01",
-                       adc_c(11 downto 2) when "10",
                        (others => '0')    when others;
 
     mode          <= reg_trig_ctrl(7 downto 6);
@@ -406,16 +405,6 @@ begin
             data_out => ram_b_out
         );
 
-    ram_c : entity work.dp_ram_4096x12
-        port map(
-            clk_wr   => clk, clk_rd   => clk,
-            wr_en    => write_enable,
-            addr_wr  => wr_ptr,
-            data_in  => adc_c,
-            addr_rd  => rd_index,
-            data_out => ram_c_out
-        );
-
 ------------------------------------------------------------------
 -- MMIO write logic - Versione Corretta
 ------------------------------------------------------------------
@@ -529,9 +518,6 @@ end process;
                     rd_cha_strobe <= '1';
                 when REG_CHB =>
                     mmio_rdata <= std_logic_vector(to_unsigned(to_integer(ram_b_out) / 16, 8));
-                    out_en <= '1';
-                when REG_CHC =>
-                    mmio_rdata <= std_logic_vector(to_unsigned(to_integer(ram_c_out) / 16, 8));
                     out_en <= '1';
                 when REG_INDEX =>
                     mmio_rdata <= std_logic_vector(reg_index_int(7 downto 0));

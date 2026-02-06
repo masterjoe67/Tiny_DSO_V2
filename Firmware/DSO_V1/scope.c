@@ -106,73 +106,16 @@ void set_trigger_level(uint16_t level12)
     REG_TRIGGER_LEVEL = b1;
 }
 
-void draw_trig_mode_btn(){
-    setTextSize(1);
-    setTextColor(WHITE, 0x0000);
-    switch (trigger_mode) {
-        case TRIG_MODE_SINGLE:
-            tft_set_cursor(270, 24);
-            tft_Print("SING");
-            break;
 
-        case TRIG_MODE_NORMAL:
-            tft_set_cursor(270, 24);
-            tft_Print("NORM");
-            break;
 
-        case TRIG_MODE_AUTO:
-            tft_set_cursor(270, 24);
-            tft_Print("AUTO");
-            break;
-    }
-}
-
-void draw_trig_slope_btn(){
-    tft_fillRect(266, 57, 42, 42, 0x0000 );
-    switch (trigger_slope) {
-        case TRIG_SLOPE_RISING:
-            
-            tft_drawLine(276, 95, 286, 75, CYAN);
-            tft_drawLine(286, 75, 300, 75, CYAN);
-            break;
-
-        case TRIG_SLOPE_FALLING:
-            tft_drawLine(276, 75, 286, 75, CYAN);
-            tft_drawLine(286, 75, 300, 95, CYAN);
-
-            break;
-
-    }
-}
-
-void draw_pan_tdiv_btn(){
-    tft_fillRect(266, 165, 42, 42, 0x0000 );
-    switch (mode_tdiv_pan) {
-        case T_DIV:
-            tft_set_cursor(270, 190);
-            tft_Print("T/Div");
-            break;
-
-        case PAN:
-            tft_set_cursor(270, 190);
-            tft_Print("PAN ");
-
-            break;
-
-    }
-}
-
-/* controlla se il core è pronto */
-static inline bool osc_is_ready(void)
+void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope, uint8_t source)
 {
-    return (REG_TRIG & 0x02) != 0;  // bit READY
-}
-
-void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope)
-{
+    source -= 1;
+    if(source > 1) source = 1;
     uint8_t v = 0;
 
-    v |= (mode & 0x3) << 6;        // bits 7..6 = mode
+    v |= (mode & 0x3) << 6;       // bits 7..6 = mode
+    v |= (source & 0x3) << 4;     // bits 5..4 = source (00=CH1, 01=CH2)
     v |= (slope & 1) << 3;        // bit 3 = edge
     v |= (1 << 2);                // trig_enable = 1
     v |= (0 << 0);                // rearm = 0
@@ -180,8 +123,7 @@ void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope)
     REG_CHC = v;
     trigger_mode = mode;
     trigger_slope = slope;
-    //();
-    //draw_trig_slope_btn();
+
 }
 
 void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,
@@ -199,47 +141,6 @@ void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,
 
 
 // funzione per disegnare la traccia sul TFT
-/*void draw_trace(uint8_t *buffer, uint8_t *old_buffer, uint16_t length, uint16_t y_offset, uint16_t color)
-{
-    for (uint16_t i=10; i<length; i++) {
-        // x ciclico su display
-        uint16_t x = i - 8;
-
-        uint8_t y = (buffer[i] / 2) + y_offset;  
-        if (y >= _width) y = _height-1;
-  
-        tft_drawPixel(x, old_buffer[i], 0x0000);
-        tft_drawPixel(x, y, color);
-        old_buffer[i] = y;
-    
-   } 
-}
-
-void draw_trace(uint8_t *buffer, uint8_t *old_buffer, uint16_t length, uint16_t y_offset, uint16_t color)
-{
-    // Partiamo da i=0 e arriviamo a length (che ora sarà 400)
-    for (uint16_t i = 0; i < length; i++) {
-        
-        // 1. Coordinata X: deve partire da MARGIN_X (5)
-        uint16_t x = i + MARGIN_X;
-
-        // 2. Coordinata Y: manteniamo la tua logica (buffer/2) + offset
-        // Assicuriamoci che non superi i 320 pixel di altezza totale
-        uint16_t y = (buffer[i] / 2) + y_offset;  
-        
-        if (y >= 320) y = 319; // Protezione per non scrivere fuori memoria
-  
-        // 3. Cancellazione: usa la vecchia coordinata Y salvata
-        tft_drawPixel(x, old_buffer[i], BLACK);
-        
-        // 4. Disegno: nuovo pixel
-        tft_drawPixel(x, y, color);
-        
-        // 5. Memorizzazione per il prossimo frame
-        old_buffer[i] = y;
-    } 
-}*/
-
 void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted)
 {
     const int16_t Y_MIN = MARGIN_Y;            // 25
@@ -289,65 +190,6 @@ void rearm(){
         REG_TRIG = 0x01;
         freeze = false;
     }
-}
-
-void ToggleTriggerMode(void)
-{
-    switch (trigger_mode) {
-        case TRIG_MODE_SINGLE:
-            trigger_mode = TRIG_MODE_NORMAL;
-            mode_tdiv_pan = T_DIV;
-            break;
-
-        case TRIG_MODE_NORMAL:
-            trigger_mode = TRIG_MODE_AUTO;
-            mode_tdiv_pan = T_DIV;
-            break;
-
-        case TRIG_MODE_AUTO:
-        default:
-            trigger_mode = TRIG_MODE_SINGLE;
-            break;
-    }
-
-    set_trigger_mode(trigger_mode, trigger_slope);
-    //draw_pan_tdiv_btn();
-    
-
-}
-
-void ToggleTriggerSlope(void)
-{
-    switch (trigger_slope) {
-        case TRIG_SLOPE_RISING:
-            trigger_slope = TRIG_SLOPE_FALLING;
-            break;
-
-        case TRIG_SLOPE_FALLING:
-        default:
-            trigger_slope = TRIG_SLOPE_RISING;
-            break;
-
-    }
-
-    set_trigger_mode(trigger_mode, trigger_slope);
-}
-
-void ToggleTDivPan(void)
-{
-    switch (mode_tdiv_pan) {
-        case T_DIV:
-            mode_tdiv_pan = PAN;
-            break;
-
-        case PAN:
-        default:
-            mode_tdiv_pan = T_DIV;
-            break;
-
-    }
-
-    //draw_pan_tdiv_btn();
 }
 
 
@@ -456,34 +298,7 @@ void osc_read_triggered(uint8_t *a, uint8_t *b)
     }
 }
 
-/*int16_t update_view_offset(
-    int16_t param,
-    int16_t min,
-    int16_t max,
-    int16_t step
-)
-{
-    int16_t det  = encoder_read();
-    int16_t diff = det - prev_det_sig;
-    prev_det_sig = det;
 
-    /* nessun movimento 
-    if (diff == 0)
-        return param;
-
-    /* filtro solo per glitch grossi (wrap / rumore) 
-    if (diff > 20 || diff < -20)
-        return param;
-
-    /* calcolo SEMPRE in 32 bit 
-    int32_t tmp = (int32_t)param + (int32_t)diff * (int32_t)step;
-
-    /* clamp corretto 
-    if (tmp < min) tmp = min;
-    if (tmp > max) tmp = max;
-
-    return (int16_t)tmp;
-}*/
 
 
 static inline void osc_write_view_offset(int16_t offset)
@@ -858,9 +673,9 @@ void scope_main(void)
     uint8_t key, rep;
     drawStaticInterface();
     //oscilloscope_init();
-    set_base_time(10);
+    set_base_time(11);
     set_trigger_level(trigger_level_12bit);   
-    set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING);
+    set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
    while(1)
     {
         pan_flag = false;
@@ -946,24 +761,20 @@ void scope_main(void)
                         case 12: // Tasto 1 (Top) -> Sorgente (CH1 / CH2)
                             trigger_source++;
                             if (trigger_source > 2) trigger_source = 1;
+                            set_trigger_mode(trigger_mode, trigger_slope, trigger_source);
                             updateSidebarLabels();
-                            // Aggiorniamo l'etichetta del tasto
-                            //drawMenuButton(0, (trigger_source == 1) ? "SRC: CH1" : "SRC: CH2", true, WHITE);
                             break;
 
                         case 9:  // Tasto 2 -> Fronte (Rising / Falling)
                             trigger_slope = !trigger_slope;
-                            set_trigger_mode(trigger_mode, trigger_slope);
-                            // Usiamo dei simboli grafici semplici o testo
-                            //drawMenuButton(1, trigger_slope ? "SLP: RISE" : "SLP: FALL", true, WHITE);
+                            set_trigger_mode(trigger_mode, trigger_slope, trigger_source);
                             updateSidebarLabels();
                             break;
 
                         case 6:  // Tasto 3 -> Modalità (AUTO / NORMAL)
                             trigger_mode++;
                             if (trigger_mode > 1) trigger_mode = 0;
-                            set_trigger_mode(trigger_mode, trigger_slope);
-                            //drawMenuButton(2, (trigger_mode == 0) ? "MODE: AUTO" : "MODE: NORM", true, WHITE);
+                            set_trigger_mode(trigger_mode, trigger_slope, trigger_source);
                             updateSidebarLabels();
                             break;
 
