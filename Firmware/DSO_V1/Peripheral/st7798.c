@@ -849,6 +849,61 @@ void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t
     }
 }
 
+void tft_print_int(int32_t num) {
+    char buffer[12]; // Abbastanza per un long con segno e terminatore
+    uint8_t i = 0;
+
+    // 1. Gestione dello zero
+    if (num == 0) {
+        tft_Print("0");
+        return;
+    }
+
+    // 2. Gestione numeri negativi
+    if (num < 0) {
+        tft_Print("-");
+        num = -num;
+    }
+
+    // 3. Estrazione delle cifre (partendo dall'ultima)
+    while (num > 0) {
+        buffer[i++] = (num % 10) + '0'; // Trasforma la cifra in carattere ASCII
+        num /= 10;
+    }
+
+    // 4. Stampa le cifre in ordine corretto (dall'ultima estratta alla prima)
+    while (i > 0) {
+        char c[2] = {buffer[--i], '\0'}; // tft_print di solito vuole una stringa
+        tft_Print(c);
+    }
+}
+
+void tft_print_float(float value, uint8_t decimals) {
+    // 1. Gestione numeri negativi
+    if (value < 0) {
+        tft_Print("-");
+        value = -value;
+    }
+
+    // 2. Stampa la parte intera
+    uint32_t integral = (uint32_t)value;
+    tft_print_int(integral); // Uso la tua funzione per gli interi
+
+    // 3. Stampa il punto decimale
+    if (decimals > 0) {
+        tft_Print(".");
+        
+        // 4. Calcola e stampa i decimali
+        float fraction = value - (float)integral;
+        for (uint8_t i = 0; i < decimals; i++) {
+            fraction *= 10.0f;
+            uint8_t digit = (uint8_t)fraction;
+            tft_print_int(digit);
+            fraction -= (float)digit;
+        }
+    }
+}
+
 int test() {
     // Inizializzazione fisica
     tft_init_full_sequence();

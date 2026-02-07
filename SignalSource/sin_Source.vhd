@@ -88,7 +88,7 @@ architecture rtl of sine_50hz_hex is
     -- 2. Accumulatore di fase (per i 50Hz)
     signal phase_acc : unsigned(31 downto 0) := (others => '0');
     constant PHASE_INC : unsigned(31 downto 0) := to_unsigned(
-        integer((50.0 * 4294967296.0) / real(CLK_FREQ)), 32);
+        integer((300.0 * 4294967296.0) / real(CLK_FREQ)), 32);
     
     -- 3. PWM a 10 bit
     signal pwm_cnt : unsigned(9 downto 0) := (others => '0');

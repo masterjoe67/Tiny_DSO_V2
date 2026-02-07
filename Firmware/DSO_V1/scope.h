@@ -35,6 +35,8 @@
 #define MENU_CH1        1
 #define MENU_CH2        2
 #define MENU_TRIG       3
+#define MENU_TBASE      4
+
 
 #define COUPL_DC  0
 #define COUPL_AC  1
@@ -44,6 +46,9 @@
 #define MODE_NONE 0
 #define MODE_Y_POS 1
 #define MODE_TRIG_LEVEL 2
+#define MODE_TBASE 3
+
+#define MAX_TIMEBASE_IDX 18
 
 extern uint16_t _width;
 extern uint16_t _height;

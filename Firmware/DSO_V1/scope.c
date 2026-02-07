@@ -50,7 +50,7 @@ uint16_t ch2_color = CYAN; // Il colore del canale 2
 bool ch_visible[2] = {true, true}; 
 uint8_t* buffers_vecchi[2] = {old_buffer_a, old_buffer_b}; // Puntatori ai tuoi buffer di cancellazione
 
-uint16_t trigger_level_12bit = 2048;
+uint16_t trigger_level_12bit = 0x07FF;
 uint16_t y_offset_ch[2] = {120, 120};
 
 //uint8_t ch1_coupling = COUPL_DC; // Stato iniziale
@@ -65,45 +65,51 @@ bool ch_inverted[2] = {false, false};
 uint8_t encoderMode = MODE_NONE;
 int16_t last_trig_y = -1; // Per cancellare la vecchia linea
 
-static const char *time_div_str[20] = {
-    "1uS",
-    "2uS",
-    "5uS",
-    "10uS",
-    "20uS",
-    "50uS",
-    "100uS",
-    "200uS",
-    "500uS",
-    "1mS",
-    "2mS",
-    "5mS",
-    "10mS",
-    "20mS",
-    "50mS",
-    "100mS",
-    "200mS",
-    "500mS",
-    "1S",
-    "2S"
+uint8_t current_time_base_idx = 0;
+
+const char* v_div_labels[] = {
+    "10mV", "20mV", "50mV", 
+    "100mV", "200mV", "500mV", 
+    "1V", "2V", "5V","10V"
 };
+
+#define MAX_VDIV_IDX 9
+uint8_t ch1_vdiv_idx = 6; // Default a 1V/div
+uint8_t ch2_vdiv_idx = 6; // Default a 1V/div
+
+const char* time_base_labels[] = {
+    "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
+    "100us", "200us", "500us", "1ms",   "2ms",   "5ms", 
+    "10ms",  "20ms",  "50ms",  "100ms", "200ms", "500ms", 
+    "1s"
+};
+
+void set_base_time(uint8_t index) {
+    // Limite di sicurezza a 1s (indice 18)
+    if (index > MAX_TIMEBASE_IDX) index = MAX_TIMEBASE_IDX;
+    
+    current_time_base_idx = index;
+
+    // Scrittura nel registro MMIO dell'FPGA
+    REG_BASETIME = index;
+    
+    // Aggiorna la grafica
+   // update_timebase_ui();
+}
 
 //Prototipe
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase);
 
-void set_base_time(uint8_t sel)
-{
-    REG_BASETIME = sel;   // 0..19
-}
 
 void set_trigger_level(uint16_t level12)
 {
-    level12 &= 0x0FFF;   // sicurezza
-    uint8_t b0 = (uint8_t)(level12 & 0xFF);
-    uint8_t b1 = (uint8_t)((level12 >> 8) & 0x03);
+    level12 &= 0x0FFF; 
+    uint8_t b0 = (uint8_t)(level12 & 0xFF);         // Primi 8 bit (0-7)
+    uint8_t b1 = (uint8_t)((level12 >> 8) & 0x0F);  // Altri 4 bit (8-11)
 
-    REG_TRIGGER_LEVEL = b0;
-    REG_TRIGGER_LEVEL = b1;
+    REG_TRIGGER_LEVEL = b0;   // bytecnt 00
+    REG_TRIGGER_LEVEL = b1;   // bytecnt 01
+    REG_TRIGGER_LEVEL = 0x00; // bytecnt 10 -> triggera il latch del valore
 }
 
 
@@ -126,19 +132,6 @@ void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope, uint8_t source)
 
 }
 
-void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,
-                      trig_channel_t chan, uint8_t edge_rising) {
-    // Livello trigger 10 bit
-    set_trigger_level(trig_level);
-
-    // Modalità e canale trigger
-    REG_TRIG = ((mode & 0x03) << 6) |      // bit 7-6: mode
-               ((chan & 0x03) << 4) |      // bit 5-4: channel
-               ((edge_rising?0:1) << 3) |  // bit3: edge (0=rising,1=falling)
-               (1 << 2) |                  // bit2: trigger enable
-               (1 << 0);                   // bit0: rearm
-}
-
 
 // funzione per disegnare la traccia sul TFT
 void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted)
@@ -151,7 +144,7 @@ void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y
 
         // 1. Dati e Inversione
         uint8_t raw_data = buffer[i];
-        if (inverted) raw_data = 255 - raw_data;
+        if (!inverted) raw_data = 255 - raw_data;
 
         // 2. Calcolo coordinata Y reale (con segno!)
         int16_t y_now = (int16_t)(raw_data / 2) + y_offset;
@@ -198,7 +191,7 @@ static inline void osc_arm_readout(void)
     REG_INDEX = 0;
 }
 
-void draw_time_div()
+/*void draw_time_div()
 {
     if (time_div_sel > 19)
         return;
@@ -209,10 +202,10 @@ void draw_time_div()
        time_div_sel_changed = false;
     }
     tft_Print(time_div_str[time_div_sel]);
-    /*uart_print("time_div_sel ");    
+    uart_print("time_div_sel ");    
     uart_print_hex(time_div_sel);
-    uart_print("\r\n");*/
-}
+    uart_print("\r\n");
+}*/
 
 Point_t old_a = { 0, 0 };
 Point_t old_b = { 0, 0 };
@@ -235,7 +228,7 @@ void drawPanTrack(){
 }
 
 
-void tft_drawGrid(uint16_t color) {
+/*void tft_drawGrid(uint16_t color) {
     // Definiamo i confini dell'area traccia basandoci sui nostri margini
     int16_t xStart = MARGIN_X;
     int16_t yStart = MARGIN_Y;
@@ -266,9 +259,45 @@ void tft_drawGrid(uint16_t color) {
     // Se drawPanTrack() serve a disegnare i cursori di posizione, 
     // chiamala alla fine così restano sopra la griglia
     // drawPanTrack(); 
+}*/
+
+void tft_drawGrid(uint16_t color) {
+    int16_t xStart = MARGIN_X;
+    int16_t yStart = MARGIN_Y;
+    int16_t xEnd   = MARGIN_X + TRACE_W;
+    int16_t yEnd   = MARGIN_Y + TRACE_H;
+
+    uint8_t gridSpacing = 40;  // Orizzontale (Tempo)
+    uint8_t gridVSpacing = 30; // Verticale (Tensione)
+    uint8_t dotSpacing  = 4;
+
+    // Calcoliamo le coordinate centrali
+    // Nota: Assicurati che TRACE_W/2 e TRACE_H/2 siano multipli di gridSpacing
+    int16_t xCenter = xStart + (TRACE_W / 2);
+    int16_t yCenter = yStart + (TRACE_H / 2);
+
+    // 1. Linee Orizzontali
+    for (int16_t y = yStart; y <= yEnd; y += gridVSpacing) {
+        // Se è la linea centrale orizzontale, usiamo passo 1 (linea continua)
+        // altrimenti usiamo dotSpacing
+        uint8_t step = (y == yCenter) ? 2 : dotSpacing;
+        
+        for (int16_t x = xStart; x <= xEnd; x += step) {
+            tft_drawPixel(x, y, color);
+        }
+    }
+
+    // 2. Linee Verticali
+    for (int16_t x = xStart; x <= xEnd; x += gridSpacing) {
+        // Se è la linea centrale verticale, usiamo passo 1 (linea continua)
+        // altrimenti usiamo dotSpacing
+        uint8_t step = (x == xCenter) ? 2 : dotSpacing;
+
+        for (int16_t y = yStart; y <= yEnd; y += step) {
+            tft_drawPixel(x, y, color);
+        }
+    }
 }
-
-
 
 
 void osc_read_triggered(uint8_t *a, uint8_t *b)
@@ -314,7 +343,7 @@ static inline void osc_write_view_offset(int16_t offset)
 
 void acquire_and_draw(){
     //drawDottedGridFast(8, 0, 254, 238, 40, 4, WHITE);
-    tft_drawGrid(WHITE);
+    tft_drawGrid(LIGHTGREY);
     osc_read_triggered(buffer_a, buffer_b);
     if (ch_visible[0]) {
         draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0]);
@@ -324,7 +353,7 @@ void acquire_and_draw(){
     if (ch_visible[1]) {
         draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1]);
     }
-    draw_trigger_line(trigger_level_12bit, YELLOW, true);
+    draw_trigger_line(trigger_level_12bit, YELLOW, false);
     //draw_trace(buffer_a, old_buffer_a, 400, CH0_Y, GREEN);
     //draw_trace(buffer_b, old_buffer_b, 400, CH0_Y, RED);
     
@@ -400,7 +429,7 @@ void drawStaticInterface() {
     }
 
     // 6. Ripristina la griglia
-    tft_drawGrid(WHITE);
+    tft_drawGrid(LIGHTGREY);
 }
 
 void toggleCH(uint8_t ch) 
@@ -572,6 +601,16 @@ void updateSidebarLabels() {
         // TASTO 4: Ritorno
         drawMenuButton(4, "BACK", false, WHITE);
     }
+
+    else if (currentMenu == MENU_TBASE) {
+        
+        drawMenuButton(0, "       ", true, WHITE);
+        drawMenuButton(1, "       ", true, WHITE);
+        drawMenuButton(2, "       ", true, WHITE);
+        drawMenuButton(3, "       ", true, WHITE);
+        drawMenuButton(4, "       ", true, WHITE);
+  
+    }
 }
 
 void toggleInvert(uint8_t ch) 
@@ -632,13 +671,50 @@ void toggleTrigLevelMode() {
     drawMenuButton(4, label, (encoderMode == MODE_Y_POS), color);
 }
 
-void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
+int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
+    // 1. Centriamo il campione (0-255) rispetto allo zero virtuale (128)
+    // Usiamo un int16 per gestire i valori negativi
+    int16_t sample = (int16_t)raw_8bit - 128;
+
+    // 2. Tabella dei fattori di scala
+    // Se a 1V/div (idx 6) vogliamo che una divisione (30px) sia, ad esempio, 50 unità ADC
+    // allora moltiplichiamo per un fattore che adatti il segnale.
+    
+    float scale_factor = 1.0f;
+    switch(vdiv_idx) {
+        case 0: scale_factor = 10.0f; break; // 10mV - Molto zoomato
+        case 1: scale_factor = 5.0f;  break; // 20mV
+        case 2: scale_factor = 2.0f;  break; // 50mV
+        case 3: scale_factor = 1.0f;  break; // 100mV
+        case 4: scale_factor = 0.5f;  break; // 200mV
+        case 5: scale_factor = 0.2f;  break; // 500mV
+        case 6: scale_factor = 0.1f;  break; // 1V - Rimpicciolito
+        case 7: scale_factor = 0.05f; break; // 2V
+        case 8: scale_factor = 0.02f; break; // 5V
+        case 9: scale_factor = 0.01f; break; // 10V
+    }
+
+    // 3. Calcolo della coordinata Y
+    // yCenter è il centro della tua griglia (es. 120 + MARGIN_Y)
+    // Sottraiamo perché sul display l'asse Y è invertito (0 è in alto)
+    int16_t y_pixel = y_offset_ch[trigger_source - 1] - (int16_t)(sample * scale_factor);
+
+    // 4. Clipping di sicurezza per non uscire dalla griglia
+    if (y_pixel < MARGIN_Y) return MARGIN_Y;
+    if (y_pixel > MARGIN_Y + TRACE_H) return MARGIN_Y + TRACE_H;
+
+    return y_pixel;
+}
+
+/*void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     // 1. Mappiamo 0-4095 nei pixel della traccia (che sono 0-127 perché buffer/2)
     // Se la tua visualizzazione usa (raw_data / 2) + offset, facciamo lo stesso:
     uint16_t level8 = level12 >> 4; // Portiamo i 12 bit a 8 bit (0-255)
     
     uint8_t idx = trigger_source - 1;
-    int16_t y = (level8 / 2) + y_offset_ch[idx];
+   int16_t y = -(level8 / 2) + y_offset_ch[idx];
+
+    //int16_t y = scale_8bit_to_pixel(level8, 0);
 
     // 2. Clipping: disegna solo se dentro la griglia
     if (y > MARGIN_Y && y < (MARGIN_Y + TRACE_H)) {
@@ -656,13 +732,116 @@ void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
         
         last_trig_y = y;
     }
+}*/
+
+
+void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
+    // 1. Portiamo a 8 bit (0-255)
+    uint8_t raw_data = level12 >> 4; 
+
+    // 2. Applichiamo la STESSA inversione della traccia
+    // Se la traccia è invertita (inverted=false nel draw_trace), facciamo 255 - raw_data
+    // Supponiamo che 'inverted' qui segua la stessa logica del canale selezionato
+    bool ch_inverted = false; // Metti qui la variabile che passi a draw_trace per quel canale
+    if (!ch_inverted) {
+        raw_data = 255 - raw_data;
+    }
+
+    // 3. Calcolo coordinata Y reale (IDENTICO alla draw_trace)
+    // Usiamo y_offset_ch che passi alla draw_trace
+    int16_t y = (int16_t)(raw_data / 2) + y_offset_ch[trigger_source - 1];
+
+    // 4. CANCELLAZIONE
+    if (last_trig_y >= MARGIN_Y && last_trig_y <= (MARGIN_Y + TRACE_H)) {
+        tft_drawFastHLine(MARGIN_X, last_trig_y, TRACE_W, BLACK);
+        // Se vuoi essere pignolo, qui potresti ripristinare i puntini della griglia
+    }
+
+    if (!erase) {
+        // 5. DISEGNO E CLIPPING
+        if (y > MARGIN_Y && y < (MARGIN_Y + TRACE_H)) {
+            // Disegno linea tratteggiata
+            for (uint16_t x = MARGIN_X; x < MARGIN_X + TRACE_W; x += 10) {
+                tft_drawFastHLine(x, y, 5, color); 
+            }
+            last_trig_y = y;
+        } else {
+            last_trig_y = 0; 
+        }
+    }
 }
+
+uint8_t old_ch1_vdiv_idx, old_ch2_vdiv_idx, old_current_time_base_idx = 0xFF;
+
+uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
+uint16_t old_trigger_level_12bit = 0xFFFF;
+
+
+void update_status_bar(bool force) {
+    uint16_t yPos = MARGIN_Y + TRACE_H + 10;
+    uint16_t xStart = MARGIN_X;
+
+    setTextSize(1);
+
+    // --- CANALE 1 ---
+    if(old_ch1_vdiv_idx != ch1_vdiv_idx || old_ch_coupling[0] != ch_coupling[0] || force){
+        tft_fillRect(xStart, yPos, 100, 16, BLACK);
+        setTextColor(CYAN, BLACK);
+        tft_set_cursor(xStart, yPos);
+        tft_Print("CH1: ");
+        tft_Print(v_div_labels[ch1_vdiv_idx]); // es. "1V"
+        tft_Print(" ");
+        tft_Print(ch_coupling[0] ? "AC" : "DC");
+        old_ch1_vdiv_idx = ch1_vdiv_idx;
+        old_ch_coupling[0] = ch_coupling[0];
+    }
+
+    // --- CANALE 2 ---
+    if(old_ch2_vdiv_idx != ch2_vdiv_idx || old_ch_coupling[1] != ch_coupling[1] || force){
+        tft_fillRect(xStart + 100, yPos, 100, 16, BLACK);
+        setTextColor(YELLOW, BLACK);
+        tft_set_cursor(xStart + 100, yPos);
+        tft_Print("CH2: ");
+        tft_Print(v_div_labels[ch2_vdiv_idx]);
+        tft_Print(" ");
+        tft_Print(ch_coupling[1] ? "AC" : "DC");
+        old_ch2_vdiv_idx = ch2_vdiv_idx;
+        old_ch_coupling[1] = ch_coupling[1];
+    }
+
+    // --- BASE TEMPI ---
+    if(old_current_time_base_idx != current_time_base_idx || force){
+        tft_fillRect(xStart + 210, yPos, 100, 16, BLACK);
+        setTextColor(WHITE, BLACK);
+        tft_set_cursor(xStart + 210, yPos);
+        tft_Print("T: ");
+        tft_Print(time_base_labels[current_time_base_idx]);
+        old_current_time_base_idx = current_time_base_idx;
+    tft_Print("/div");
+    }
+
+    // --- TRIGGER LEVEL ---
+    if(old_trigger_level_12bit != trigger_level_12bit || force){
+        tft_fillRect(xStart + 310, yPos, 100, 16, BLACK);
+        setTextColor(GREEN, BLACK);
+        tft_set_cursor(xStart + 310, yPos);
+        tft_Print("Trig:");
+        // Calcoliamo il valore in Volt o mostriamo i bit
+        // Se reg_trig_level è 0-4095 (12 bit)
+        uint16_t level_mv = (uint32_t)trigger_level_12bit * 3300 / 4096; 
+        tft_print_float(level_mv / 1000.0, 2);
+        tft_Print("V");
+        old_trigger_level_12bit = trigger_level_12bit;
+    }
+}
+
+
 
 /************************************************************************************/
 /*                                 KEY MAP                                          */
 /*          ROW0            ROW1        ROW2                                            */
 /*      12 context       13 CH1       14 CH2             */
-/*       9 context       10 TRIG      11 */
+/*       9 context       10 TRIG      11 T/Div    */
 /*       6 context         7 STEP              */
 /*       3 context                         */
 /*       0 context                        */
@@ -671,8 +850,9 @@ void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
 void scope_main(void)
 {
     uint8_t key, rep;
+    uint8_t new_sel;
     drawStaticInterface();
-    //oscilloscope_init();
+    update_status_bar(true);
     set_base_time(11);
     set_trigger_level(trigger_level_12bit);   
     set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
@@ -698,6 +878,11 @@ void scope_main(void)
                 // --- TASTI FISICI DEDICATI (Master) ---
                 case 10: // Ipotetico tasto fisico "Vertical CH1"
                     currentMenu = MENU_TRIG;
+                    updateSidebarLabels(); // Ridisegna etichette 
+                    break;
+                case 11: // Ipotetico tasto fisico "T/Div"
+                    currentMenu = MENU_TBASE;
+                    encoderMode = MODE_TBASE;
                     updateSidebarLabels(); // Ridisegna etichette 
                     break;
                 case 13: // Ipotetico tasto fisico "Vertical CH1"
@@ -807,10 +992,10 @@ if (encoderMode == MODE_Y_POS) {
     // Se vuoi vedere il valore sul tasto mentre lo giri:
     //updateYPosLabel(currentMenu == MENU_CH1 ? 1 : 2);
 }
-if (encoderMode == MODE_TRIG_LEVEL) {
+else if (encoderMode == MODE_TRIG_LEVEL) {
     uint16_t old_trigger_level_12bit = trigger_level_12bit;
     //update_trigger_by_encoder(rot);
-    trigger_level_12bit = update_param_16_signed(trigger_level_12bit, 0, 4095, 10);
+    trigger_level_12bit = update_param_16(trigger_level_12bit, 0, 4095, 10);
     if (trigger_level_12bit != old_trigger_level_12bit) {
         // Cancella precedente
        // if (last_trig_y != -1) draw_trigger_line(trigger_level_12bit, YELLOW, true);
@@ -825,41 +1010,23 @@ if (encoderMode == MODE_TRIG_LEVEL) {
         updateSidebarLabels(); 
     }
 }
+else if (encoderMode == MODE_TBASE) {
+    new_sel = update_param_8(time_div_sel, 0, 16, 1);
+    if (new_sel != prev_time_div_sel) {
+        // Aggiorna il registro solo se il valore è cambiato
+        REG_BASETIME = new_sel;
+        prev_time_div_sel = new_sel;
+        time_div_sel = new_sel; // aggiorna il valore corrente
+        time_div_sel_changed = true;
+        current_time_base_idx =time_div_sel;
+        updateSidebarLabels(); 
+    }
 
-uint8_t new_sel;
-int16_t new_pan;
-    /*switch (mode_tdiv_pan) {
-        case T_DIV:
-            new_sel = update_param_8(time_div_sel, 0, 16, 1);
-            if (new_sel != prev_time_div_sel) {
-                // Aggiorna il registro solo se il valore è cambiato
-                REG_BASETIME = new_sel;
-                prev_time_div_sel = new_sel;
-                time_div_sel = new_sel; // aggiorna il valore corrente
-                time_div_sel_changed = true;
-            }
-            break;
-
-        case PAN:
-            new_pan = update_view_offset(view_offset , -PAN_LIMIT, +PAN_LIMIT, PAN_STEP);
-            if (new_pan != prev_view_offset) {
-                
-                // Aggiorna il registro solo se il valore è cambiato
-                osc_write_view_offset(new_pan);
-                osc_arm_readout(); 
-                prev_view_offset = new_pan;
-                view_offset = new_pan; // aggiorna il valore corrente
-                pan_flag = true;
-            }
-            break;
-        default:
-            
-            break;
-
-    }*/
+}
     acquire_and_draw();
-
+    update_status_bar(false);
         
 
+    
     }
 }

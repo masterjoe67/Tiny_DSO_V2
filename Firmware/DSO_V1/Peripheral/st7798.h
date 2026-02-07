@@ -111,4 +111,6 @@ void tft_drawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t c
 void tft_drawCharGL(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size);
 void tft_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t bg);
+void tft_print_int(int32_t num);
+void tft_print_float(float value, uint8_t decimals);
 #endif

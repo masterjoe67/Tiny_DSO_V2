@@ -63,6 +63,8 @@ architecture rtl of oscilloscope_top is
         to_unsigned(1999999, 32)   -- 19: 2s
     );
 
+
+
     ------------------------------------------------------------------
     -- Costanti di sistema
     ------------------------------------------------------------------
@@ -128,9 +130,9 @@ architecture rtl of oscilloscope_top is
     signal trig_armed            : std_logic := '0';
 
     -- ADC samples
-    signal trig_sample           : unsigned(9 downto 0);
-    signal prev_sample           : unsigned(9 downto 0);
-    signal trig_sample_sync      : unsigned(9 downto 0);
+    signal trig_sample           : unsigned(11 downto 0);
+    signal prev_sample           : unsigned(11 downto 0);
+    signal trig_sample_sync      : unsigned(11 downto 0);
 
     -- MMIO byte counters
     signal base_bytecnt          : unsigned(2 downto 0);
@@ -201,10 +203,10 @@ begin
     -- Trigger sample selection
     -- Selezione canale ADC per la comparazione di trigger
     ------------------------------------------------------------------
-    with trig_chan_sel select
-        trig_sample <= adc_a(11 downto 2) when "00",
-                       adc_b(11 downto 2) when "01",
-                       (others => '0')    when others;
+	with trig_chan_sel select
+		trig_sample <= adc_a(11 downto 0) when "00", -- Rimosso lo shift (11 downto 2)
+                   adc_b(11 downto 0) when "01",
+                   (others => '0')    when others;
 
     mode          <= reg_trig_ctrl(7 downto 6);
     trig_chan_sel <= reg_trig_ctrl(5 downto 4);
@@ -484,16 +486,33 @@ begin
         end if;
 
         -- Logica Trigger (Invariata)
-        if mmio_we = '1' and trig_reg_sel = '1' then
-            if trig_bytecnt = "00" then trig_shift(7 downto 0) <= unsigned(mmio_wdata);
-            elsif trig_bytecnt = "01" then trig_shift(15 downto 8) <= unsigned(mmio_wdata);
-            elsif trig_bytecnt = "10" then
-                trig_shift(23 downto 16) <= unsigned(mmio_wdata);
-                reg_trig_level <= trig_shift(11 downto 0);
-            end if;
-            if trig_bytecnt = "10" then trig_bytecnt <= (others => '0');
-            else trig_bytecnt <= trig_bytecnt + 1; end if;
-        end if;
+--        if mmio_we = '1' and trig_reg_sel = '1' then
+--            if trig_bytecnt = "00" then trig_shift(7 downto 0) <= unsigned(mmio_wdata);
+--            elsif trig_bytecnt = "01" then trig_shift(15 downto 8) <= unsigned(mmio_wdata);
+--            elsif trig_bytecnt = "10" then
+--                trig_shift(23 downto 16) <= unsigned(mmio_wdata);
+--                reg_trig_level <= trig_shift(11 downto 0);
+--            end if;
+--            if trig_bytecnt = "10" then trig_bytecnt <= (others => '0');
+--            else trig_bytecnt <= trig_bytecnt + 1; end if;
+--        end if;
+if mmio_we = '1' and trig_reg_sel = '1' then
+    if trig_bytecnt = "00" then 
+        trig_shift(7 downto 0) <= unsigned(mmio_wdata);
+    elsif trig_bytecnt = "01" then 
+        trig_shift(15 downto 8) <= unsigned(mmio_wdata);
+    elsif trig_bytecnt = "10" then
+        -- mmio_wdata qui non lo usiamo per il livello, 
+        -- ma serve a scatenare il caricamento finale
+        reg_trig_level <= trig_shift(11 downto 0); 
+    end if;
+
+    if trig_bytecnt = "10" then 
+        trig_bytecnt <= (others => '0');
+    else 
+        trig_bytecnt <= trig_bytecnt + 1; 
+    end if;
+end if;
 
         if mmio_we = '1' and trig_ctrl_sel = '1' then
             reg_trig_ctrl <= mmio_wdata;
