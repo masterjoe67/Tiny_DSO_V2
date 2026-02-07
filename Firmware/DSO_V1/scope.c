@@ -227,40 +227,6 @@ void drawPanTrack(){
     tft_FillTriangle(a, b, c, WHITE);
 }
 
-
-/*void tft_drawGrid(uint16_t color) {
-    // Definiamo i confini dell'area traccia basandoci sui nostri margini
-    int16_t xStart = MARGIN_X;
-    int16_t yStart = MARGIN_Y;
-    int16_t xEnd   = MARGIN_X + TRACE_W;
-    int16_t yEnd   = MARGIN_Y + TRACE_H;
-
-    // Parametri della griglia:
-    // gridSpacing = 40 (divisioni principali: 10 orizzontali)
-    // dotSpacing  = 4  (puntini ogni 4 pixel per creare la linea tratteggiata)
-    uint8_t gridSpacing = 40;
-    uint8_t gridVSpacing = 30; // 8 divisioni verticali (240 / 8 = 30)
-    uint8_t dotSpacing  = 4;
-
-    // 1. Linee Orizzontali Puntinate (Divisioni di tensione)
-    for (int16_t y = yStart; y <= yEnd; y += gridVSpacing) {
-        for (int16_t x = xStart; x <= xEnd; x += dotSpacing) {
-            tft_drawPixel(x, y, color);
-        }
-    }
-
-    // 2. Linee Verticali Puntinate (Divisioni di tempo)
-    for (int16_t x = xStart; x <= xEnd; x += gridSpacing) {
-        for (int16_t y = yStart; y <= yEnd; y += dotSpacing) {
-            tft_drawPixel(x, y, color);
-        }
-    }
-    
-    // Se drawPanTrack() serve a disegnare i cursori di posizione, 
-    // chiamala alla fine così restano sopra la griglia
-    // drawPanTrack(); 
-}*/
-
 void tft_drawGrid(uint16_t color) {
     int16_t xStart = MARGIN_X;
     int16_t yStart = MARGIN_Y;
@@ -340,6 +306,41 @@ static inline void osc_write_view_offset(int16_t offset)
 
 }
 
+Point_t gnd_mark_a[2] = {{ 0, 0 }, { 0, 0 }};
+Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
+Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
+uint16_t old_y_offset_ch[2];
+void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
+    // 1. Calcoliamo la posizione Y dello zero (valore ADC 128)
+    // Usiamo la stessa identica formula della tua draw_trace
+    int16_t y_zero = 64 + y_offset_ch[channel_idx];
+
+    // 2. Cancelliamo il vecchio marker (opzionale, o cancelli l'intera colonna prima)
+    if(y_offset_ch[channel_idx] != old_y_offset_ch[channel_idx]){
+        tft_FillTriangle(gnd_mark_a[channel_idx], gnd_mark_b[channel_idx], gnd_mark_c[channel_idx], BLACK);
+    }
+    // tft_fillRect(0, MARGIN_Y, MARGIN_X - 2, TRACE_H, BLACK);
+
+    // 3. Disegniamo un piccolo triangolo puntato a destra
+    // Vertici: (x,y), (x,y), (x,y)
+    // Lo mettiamo subito a sinistra della griglia (MARGIN_X)
+    uint16_t x_tip = MARGIN_X + 8;
+    uint16_t x_base = MARGIN_X;
+
+    gnd_mark_a[channel_idx].x = x_base;
+    gnd_mark_a[channel_idx].y = y_zero - 5;
+    gnd_mark_b[channel_idx].x = x_base;
+    gnd_mark_b[channel_idx].y = y_zero + 5;
+    gnd_mark_c[channel_idx].x = x_tip;
+    gnd_mark_c[channel_idx].y = y_zero;
+    // Disegno del triangolino pieno
+    tft_FillTriangle(gnd_mark_a[channel_idx], gnd_mark_b[channel_idx], gnd_mark_c[channel_idx], color);     // Punta (che indica lo zero sulla griglia)color
+
+    // Opzionale: Scriviamo il numero del canale "1" o "2" dentro o vicino
+    //setTextColor(color, BLACK);
+    //tft_set_cursor(x_base + 1, y_zero - 3);
+    //tft_print_int(channel_idx + 1);
+}
 
 void acquire_and_draw(){
     //drawDottedGridFast(8, 0, 254, 238, 40, 4, WHITE);
@@ -354,6 +355,8 @@ void acquire_and_draw(){
         draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1]);
     }
     draw_trigger_line(trigger_level_12bit, YELLOW, false);
+    draw_ground_marker(0, GREEN);
+    draw_ground_marker(1, RED);
     //draw_trace(buffer_a, old_buffer_a, 400, CH0_Y, GREEN);
     //draw_trace(buffer_b, old_buffer_b, 400, CH0_Y, RED);
     
