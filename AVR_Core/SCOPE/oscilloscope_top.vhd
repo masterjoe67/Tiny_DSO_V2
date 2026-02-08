@@ -164,6 +164,14 @@ architecture rtl of oscilloscope_top is
 	 
 	 signal view_full_raw : std_logic_vector(15 downto 0) := (others => '0');
 	 signal view_full_sign       : signed(15 downto 0) := (others => '0');
+	 
+	 signal freq_counter    : unsigned(31 downto 0) := (others => '0');
+	 signal freq_period_reg : unsigned(31 downto 0) := (others => '0');
+	 signal freq_period_latch : unsigned(31 downto 0);
+	 signal freq_byte_idx     : unsigned(1 downto 0) := "00";
+	 signal trig_hit_raw    : std_logic; -- Il trigger "puro", sempre attivo per il frequenzimetro
+	 signal prev_sample_raw : unsigned(11 downto 0); -- Campione precedente per il trigger raw
+	 signal freq_trig_armed : std_logic := '0'; -- Stato di armamento per il trigger raw
     ------------------------------------------------------------------
     -- Utility function
     ------------------------------------------------------------------
@@ -185,14 +193,13 @@ begin
     index_reg_sel <= '1' when (mmio_addr = REG_INDEX and mmio_we = '1') else '0';
     trig_reg_sel  <= '1' when (mmio_addr = REG_CHA   and mmio_we = '1') else '0';
     base_reg_sel  <= '1' when (mmio_addr = REG_CHB   and mmio_we = '1') else '0';
-    trig_ctrl_sel <= '1' when (mmio_addr = REG_CHC   and mmio_we = '1') else '0';
+    trig_ctrl_sel <= '1' when (mmio_addr = REG_TG_CTRL   and mmio_we = '1') else '0';
     trig_cmd_sel  <= '1' when (mmio_addr = REG_TRIG  and mmio_we = '1') else '0';
 
     ------------------------------------------------------------------
     -- Read index calculation
     -- Calcolo indice di lettura RAM con base stabile
     ------------------------------------------------------------------
-    --rd_index <= rd_base_stable + reg_index_int;
 	 rd_index <= unsigned(
                signed(rd_base_stable) +
                view_offset +
@@ -221,6 +228,82 @@ begin
     next_base_time_reload <= time_div_map(reg_time_div_sel);
 	 
 	 tb_view_full_sign <= std_logic_vector(view_full_sign);
+	 
+
+	
+--process(clk, rst_n)
+--begin
+--    if rst_n = '0' then
+--        freq_counter <= (others => '0');
+--        freq_period_reg <= (others => '0');
+--    elsif rising_edge(clk) then
+--        if trig_hit_raw = '1' then
+--            freq_period_reg <= freq_counter;
+--            freq_counter <= (others => '0');
+--        elsif freq_counter /= x"FFFFFFFF" then
+--            freq_counter <= freq_counter + 1;
+--        end if;
+--    end if;
+--end process;
+
+process(clk, rst_n)
+    variable gate_count : unsigned(7 downto 0) := (others => '0'); 
+    variable accumulator : unsigned(31 downto 0) := (others => '0');
+begin
+    if rst_n = '0' then
+        gate_count := (others => '0');
+        accumulator := (others => '0');
+        freq_period_reg <= (others => '0');
+    elsif rising_edge(clk) then
+        -- Incrementa sempre l'accumulatore (40MHz)
+        if accumulator /= x"FFFFFFFF" then
+            accumulator := accumulator + 1;
+        end if;
+
+        if trig_hit_raw = '1' then
+            if gate_count >= 63 then -- Raggiunti i 64 impulsi
+                freq_period_reg <= accumulator; -- LATCH!
+                accumulator := (others => '0');
+                gate_count := (others => '0');
+            else
+                gate_count := gate_count + 1;
+            end if;
+        end if;
+        
+        -- Protezione: se l'accumulatore satura, resetta tutto (timeout 100sec @40MHz)
+        if accumulator = x"FFFFFFFF" then
+            gate_count := (others => '0');
+            freq_period_reg <= (others => '0');
+        end if;
+    end if;
+end process;
+	
+	process(clk, rst_n)
+		 constant HYST : unsigned(11 downto 0) := to_unsigned(20, 12);
+		 variable v_trig_armed : std_logic := '0'; -- Usiamo una variabile o un segnale dedicato
+	begin
+		 if rst_n = '0' then
+			  trig_hit_raw <= '0';
+			  v_trig_armed := '0';
+		 elsif rising_edge(clk) then
+			  trig_hit_raw <= '0'; -- Impulso di default
+			  
+			  -- Logica di trigger SEMPRE ATTIVA (indipendente da state = ARMED)
+			  if trig_enable = '1' then
+					if trig_edge = '0' then -- Rising Edge
+						 if unsigned(trig_sample_sync) < (unsigned(trig_level) - HYST) then
+							  v_trig_armed := '1';
+						 elsif v_trig_armed = '1' and (prev_sample < trig_level) 
+														  and (trig_sample_sync >= trig_level) then
+							  trig_hit_raw <= '1'; -- Questo va al frequenzimetro
+							  v_trig_armed := '0';
+						 end if;
+					else -- Falling Edge logic...
+						 -- (stessa cosa per il falling edge)
+					end if;
+			  end if;
+		 end if;
+	end process;
 
     ------------------------------------------------------------------
     -- Stable read base logic
@@ -544,11 +627,35 @@ end process;
                 when REG_TRIG =>
                     mmio_rdata <= reg_trig_ctrl or ("000000" & ready & '0');
                     out_en <= '1';
+					 when REG_FREQ0 => 
+                    mmio_rdata <= std_logic_vector(freq_period_latch(7 downto 0));
+						  out_en <= '1';
+                when REG_FREQ1 => 
+                    mmio_rdata <= std_logic_vector(freq_period_latch(15 downto 8));
+						  out_en <= '1';
+                when REG_FREQ2 => 
+                    mmio_rdata <= std_logic_vector(freq_period_latch(23 downto 16));
+						  out_en <= '1';
+                when REG_FREQ3 => 
+                    mmio_rdata <= std_logic_vector(freq_period_latch(31 downto 24));
+						  out_en <= '1';
                 when others =>
                     out_en <= '0';
             end case;
         end if;
     end process;
+	 
+	process(clk, rst_n)
+	begin
+		 if rst_n = '0' then
+			  freq_period_latch <= (others => '0');
+		 elsif rising_edge(clk) then
+			  -- Se l'AVR sta leggendo il primo registro della frequenza
+			  if iore = '1' and mmio_addr = REG_FREQ0 then
+					freq_period_latch <= freq_period_reg;
+			  end if;
+		 end if;
+	end process;
 
     ------------------------------------------------------------------
     -- FSM state register

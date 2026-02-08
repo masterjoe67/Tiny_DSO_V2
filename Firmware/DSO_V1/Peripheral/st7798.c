@@ -904,28 +904,4 @@ void tft_print_float(float value, uint8_t decimals) {
     }
 }
 
-int test() {
-    // Inizializzazione fisica
-    tft_init_full_sequence();
 
-    // Disegno del rettangolo (320x480)
-    tft_cmd(0x2C); // RAM Write
-    for(uint32_t i = 0; i < 153600UL; i++) {
-        tft_data(0xF8); // Rosso MSB
-        tft_data(0x50); // Rosso LSB
-    }
-
-    // --- IL TRUCCO PER IL LATCH ---
-    // Inviamo un comando NOP e alziamo CS (gestito dal VHDL)
-    // Questo forza il controller a visualizzare la GRAM
-    //tft_cmd(0x00); 
-   // _delay_ms(10);
-
-    // Se ancora non vedi nulla, prova a forzare l'inversione
-    // tft_cmd(0x21); 
-
-    while(1) {
-        // Rimani qui
-    }
-    return 0;
-}

@@ -2,17 +2,22 @@
 #ifndef SCOPE_H
 #define SCOPE_H
 
+#define F_SYS_CLK 40000000UL
 #define REG_INDEX   _SFR_IO8(0x3C) //(*(volatile uint8_t*)0x81)
 #define REG_CHA     _SFR_IO8(0x13)
 #define REG_CHB     _SFR_IO8(0x14)
-#define REG_CHC     _SFR_IO8(0x15)
+#define TRIG_CTRL_REG     _SFR_IO8(0x15)
 #define REG_TRIG    _SFR_IO8(0x35)
+#define REG_FREQ0     _SFR_IO8(0x00)
+#define REG_FREQ1     _SFR_IO8(0x01)
+#define REG_FREQ2     _SFR_IO8(0x02)
+#define REG_FREQ3     _SFR_IO8(0x03)
 
 #define REG_BASETIME        _SFR_IO8(0x14)
 #define REG_TRIGGER_LEVEL   _SFR_IO8(0x13)
 #define REG_TRIGGER_MODE    _SFR_IO8(0x15)
 
-#define TRIG_CTRL_REG  REG_CHC   // TRIG CONTROL
+
 #define TRIG_CTRL_BIT  7         // il bit che sblocca wr_ptr
 
 

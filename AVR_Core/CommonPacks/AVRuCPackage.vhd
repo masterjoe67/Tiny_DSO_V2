@@ -126,10 +126,10 @@ constant DDRC_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16
 constant PINC_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#13#);
 
 -- PWM_Reg
-constant BUF_0  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#00#);
-constant BUF_1  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#01#);
-constant BUF_2  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#02#);
-constant BUF_3  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#03#);
+--constant BUF_0  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#00#);
+--constant BUF_1  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#01#);
+--constant BUF_2  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#02#);
+--constant BUF_3  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#03#);
 constant COMMIT  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#04#);
 constant RSEL  	  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#05#);
 constant CTRL       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#06#);
@@ -154,9 +154,13 @@ constant ENC_BASE 	  : std_logic_vector(3 downto 0) := "0111";
 --Scope 
 constant REG_CHA       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#13#);
 constant REG_CHB       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#14#);
-constant REG_CHC       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#15#);
+constant REG_TG_CTRL      : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#15#);
 constant REG_TRIG   	  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#35#);
 constant REG_INDEX     : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#3C#);
+constant REG_FREQ0  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#00#);
+constant REG_FREQ1  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#01#);
+constant REG_FREQ2  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#02#);
+constant REG_FREQ3  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#03#);
 -- ******************** Parallel port address table **************************************
 constant CMaxNumOfPPort : positive := 3;
 

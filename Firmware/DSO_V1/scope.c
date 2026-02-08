@@ -126,7 +126,7 @@ void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope, uint8_t source)
     v |= (1 << 2);                // trig_enable = 1
     v |= (0 << 0);                // rearm = 0
 
-    REG_CHC = v;
+    TRIG_CTRL_REG = v;
     trigger_mode = mode;
     trigger_slope = slope;
 
@@ -737,6 +737,39 @@ int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
     }
 }*/
 
+float read_fpga_frequency() {
+    uint32_t period = 0;
+    uint8_t v0, v1, v2, v3 = 0;
+
+    // Leggiamo i 4 byte in sequenza dal registro REG_FREQ
+    // L'FPGA incrementerà internamente l'indice del byte
+   /*period |= (uint32_t)REG_FREQ;         // Byte 0 (LSB)
+    period |= (uint32_t)REG_FREQ << 8;    // Byte 1
+    period |= (uint32_t)REG_FREQ << 16;   // Byte 2
+    period |= (uint32_t)REG_FREQ << 24;   // Byte 3 (MSB)*/
+
+    v0 = REG_FREQ0;
+    v1 = REG_FREQ1;
+    v2 = REG_FREQ2;
+    v3 = REG_FREQ3;
+
+    period = ((uint32_t)v3 << 24) | 
+                         ((uint32_t)v2 << 16) | 
+                         ((uint32_t)v1 << 8)  | 
+                          (uint32_t)v0;
+
+    
+   
+    float freq = 2560000000.0f / (float)period;
+    /*uart_print("Freq ");
+    uart_print_float(new_period, 1);
+    uart_print("\r\n");*/
+    if (period == 0) return 0;
+    return freq;
+}
+
+
+
 
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     // 1. Portiamo a 8 bit (0-255)
@@ -778,7 +811,7 @@ uint8_t old_ch1_vdiv_idx, old_ch2_vdiv_idx, old_current_time_base_idx = 0xFF;
 
 uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
 uint16_t old_trigger_level_12bit = 0xFFFF;
-
+uint32_t old_freq = 0xFFFFFFFF;
 
 void update_status_bar(bool force) {
     uint16_t yPos = MARGIN_Y + TRACE_H + 10;
@@ -828,13 +861,31 @@ void update_status_bar(bool force) {
         tft_fillRect(xStart + 310, yPos, 100, 16, BLACK);
         setTextColor(GREEN, BLACK);
         tft_set_cursor(xStart + 310, yPos);
-        tft_Print("Trig:");
+        tft_Print("Trig: ");
         // Calcoliamo il valore in Volt o mostriamo i bit
         // Se reg_trig_level è 0-4095 (12 bit)
         uint16_t level_mv = (uint32_t)trigger_level_12bit * 3300 / 4096; 
         tft_print_float(level_mv / 1000.0, 2);
         tft_Print("V");
         old_trigger_level_12bit = trigger_level_12bit;
+    }
+    // Supponiamo di aver calcolato 'freq'
+    float freq = read_fpga_frequency();
+    if(old_freq != freq){
+        tft_set_cursor(MARGIN_X + 210, yPos + 20); // Una riga sotto la T/div
+        setTextColor(WHITE, BLACK);
+        tft_Print("F:");
+        
+        if (freq > 1000000) {
+            tft_print_float(freq / 1000000.0, 2);
+            tft_Print("MHz");
+        } else if (freq > 1000) {
+            tft_print_float(freq / 1000.0, 1);
+            tft_Print("kHz");
+        } else {
+            tft_print_float(freq, 1);
+            tft_Print("Hz");
+        }
     }
 }
 

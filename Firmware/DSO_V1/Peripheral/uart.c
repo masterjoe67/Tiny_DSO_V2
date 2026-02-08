@@ -75,3 +75,39 @@ void uart_print_hex(uint8_t v)
     uart_putc(hex[(v >> 4) & 0x0F]);
     uart_putc(hex[v & 0x0F]);
 }
+
+void uart_print_float(float f, uint8_t decimals) {
+    // 1. Gestione del segno
+    if (f < 0) {
+        uart_putc('-');
+        f = -f;
+    }
+
+    // 2. Parte intera
+    uint32_t integral_part = (uint32_t)f;
+    uart_print_uint32(integral_part); // Usiamo la versione a 32 bit visto che le freq sono grandi
+
+    if (decimals > 0) {
+        uart_putc('.');
+
+        // 3. Estrazione dei decimali
+        // Moltiplichiamo la parte frazionaria per 10^decimali
+        float fractional = f - (float)integral_part;
+        for (uint8_t i = 0; i < decimals; i++) {
+            fractional *= 10.0f;
+            uint8_t digit = (uint8_t)fractional;
+            uart_putc('0' + digit);
+            fractional -= (float)digit;
+        }
+    }
+}
+
+void uart_print_uint32(uint32_t v) {
+    char buf[11]; // Max 4294967295\0
+    uint8_t i = 0;
+    do {
+        buf[i++] = '0' + (v % 10);
+        v /= 10;
+    } while (v);
+    while (i--) uart_putc(buf[i]);
+}
