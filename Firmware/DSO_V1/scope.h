@@ -41,17 +41,18 @@
 #define MENU_CH2        2
 #define MENU_TRIG       3
 #define MENU_TBASE      4
-
+#define MENU_PAN        5
 
 #define COUPL_DC  0
 #define COUPL_AC  1
 #define COUPL_GND 2
 
 // Encoder mode
-#define MODE_NONE 0
-#define MODE_Y_POS 1
+#define MODE_NONE       0
+#define MODE_Y_POS      1
 #define MODE_TRIG_LEVEL 2
-#define MODE_TBASE 3
+#define MODE_TBASE      3
+#define MODE_PAN        4
 
 #define MAX_TIMEBASE_IDX 18
 

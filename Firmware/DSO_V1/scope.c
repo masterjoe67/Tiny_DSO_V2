@@ -78,6 +78,12 @@ const char* v_div_labels[] = {
 uint8_t ch1_vdiv_idx = 6; // Default a 1V/div
 uint8_t ch2_vdiv_idx = 6; // Default a 1V/div
 
+uint8_t old_ch1_vdiv_idx, old_ch2_vdiv_idx, old_current_time_base_idx = 0xFF;
+
+uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
+uint16_t old_trigger_level_12bit = 0xFFFF;
+uint32_t old_freq = 0xFFFFFFFF;
+
 const char* time_base_labels[] = {
     "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
     "100us", "200us", "500us", "1ms",   "2ms",   "5ms", 
@@ -192,41 +198,6 @@ static inline void osc_arm_readout(void)
     REG_INDEX = 0;
 }
 
-/*void draw_time_div()
-{
-    if (time_div_sel > 19)
-        return;
-    tft_set_cursor(209, 215);
-    
-    if(time_div_sel_changed){
-       tft_fillRect(209, 215, 37, 16, 0x0000); 
-       time_div_sel_changed = false;
-    }
-    tft_Print(time_div_str[time_div_sel]);
-    uart_print("time_div_sel ");    
-    uart_print_hex(time_div_sel);
-    uart_print("\r\n");
-}*/
-
-Point_t old_a = { 0, 0 };
-Point_t old_b = { 0, 0 };
-Point_t old_c = { 0, 0 };
-void drawPanTrack(){
-
-    int16_t offset = 125 + view_offset;
-
-    Point_t a = { offset, 2 };
-    Point_t b = { offset + 10, 2 };
-    Point_t c = { offset + 5, 17 };
-    
-    if(pan_flag){
-        tft_FillTriangle(old_a, old_b, old_c, BLACK);
-        old_a = a;
-        old_b = b;
-        old_c = c;
-    }
-    tft_FillTriangle(a, b, c, WHITE);
-}
 
 void tft_drawGrid(uint16_t color) {
     int16_t xStart = MARGIN_X;
@@ -266,33 +237,6 @@ void tft_drawGrid(uint16_t color) {
     }
 }
 
-
-/*void osc_read_triggered(uint8_t *a, uint8_t *b)
-{
-    // SINGLE: se già congelato, NON riarmare acquisizione 
-    if (trigger_mode == TRIG_MODE_SINGLE && freeze) {
-        osc_arm_readout();   // solo lettura memoria
-    } else {
-        osc_wait_ready();
-
-        if (trigger_mode == TRIG_MODE_SINGLE) {
-            freeze = true;
-            prev_det_sig= encoder_read();
-        }
-
-        osc_arm_readout();   // acquisizione + lettura
-    }
-
-    for (int i = 0; i < 400; i++) {
-        b[i] = REG_CHB;
-        a[i] = REG_CHA;
-    }
-
-    // riarmo trigger SOLO se non in HOLD 
-    if (!(trigger_mode == TRIG_MODE_SINGLE)) {
-        REG_TRIG = 0x01;
-    }
-}*/
 void osc_read_triggered(uint8_t *a, uint8_t *b)
 {
     /* 1. Gestione del blocco acq */
@@ -335,6 +279,26 @@ static inline void osc_write_view_offset(int16_t offset)
 
 }
 
+Point_t old_a = { 0, 0 };
+Point_t old_b = { 0, 0 };
+Point_t old_c = { 0, 0 };
+void drawPanTrack(){
+
+    int16_t offset = (TRACE_W / 2) - view_offset + MARGIN_X;
+
+    Point_t a = { offset - 5, MARGIN_Y };
+    Point_t b = { offset + 5, MARGIN_Y };
+    Point_t c = { offset, MARGIN_Y + 15 };
+    
+    if(pan_flag){
+        tft_FillTriangle(old_a, old_b, old_c, BLACK);
+        old_a = a;
+        old_b = b;
+        old_c = c;
+    }
+    tft_FillTriangle(a, b, c, WHITE);
+}
+
 Point_t gnd_mark_a[2] = {{ 0, 0 }, { 0, 0 }};
 Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
 Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
@@ -369,6 +333,7 @@ void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
     //setTextColor(color, BLACK);
     //tft_set_cursor(x_base + 1, y_zero - 3);
     //tft_print_int(channel_idx + 1);
+    drawPanTrack();
 }
 
 void acquire_and_draw(){
@@ -423,7 +388,7 @@ void drawStaticInterface() {
     // 2. Barra Superiore (Status e Misure rapide)
     tft_fillRect(0, 0, 480, 20, DARKGREY);
     tft_printAt("RUN", 10, 5, GREEN, DARKGREY);
-    tft_printAt("T: 100uS", 120, 5, WHITE, DARKGREY);
+    //tft_printAt("T: 100uS", 120, 5, WHITE, DARKGREY);
     tft_printAt("Vpp: 3.24V", 250, 5, YELLOW, DARKGREY);
 
     // --- TITOLO MENU A DESTRA (Sopra i tasti) ---
@@ -433,7 +398,7 @@ void drawStaticInterface() {
     else if (currentMenu == MENU_TRIG) menuName = "TRIG";
     else                              menuName = "MENU";
     
-    tft_printAt(menuName, 420, 5, WHITE, DARKGREY);
+    tft_printAt(menuName, 430, 5, WHITE, DARKGREY);
 
     // 3. Cornice Area Traccia (400x240)
     tft_drawRect(MARGIN_X - 1, MARGIN_Y - 1, TRACE_W + 2, TRACE_H + 2, WHITE);
@@ -586,13 +551,41 @@ float calcolaVoltReali(uint8_t ch, uint8_t valoreADC) {
 void updateSidebarLabels() {
     // --- 1. AGGIORNAMENTO NOME MENU NELLA BARRA SUPERIORE ---
     const char* menuTitle;
-    if (currentMenu == MENU_CH1)      menuTitle = "CH 1";
-    else if (currentMenu == MENU_CH2) menuTitle = "CH 2";
-    else if (currentMenu == MENU_TRIG) menuTitle = "TRIG";
-    else                              menuTitle = "MENU";
+    uint16_t menuColor; // Variabile per il colore del titolo
+    switch (currentMenu) {
+        case MENU_CH1:
+            menuTitle = "CH 1";
+            menuColor = GREEN;  // Colore traccia 1
+            break;
+            
+        case MENU_CH2:
+            menuTitle = "CH 2";
+            menuColor = RED;    // Colore traccia 2
+            break;
+            
+        case MENU_TRIG:
+            menuTitle = "TRIG";
+            menuColor = YELLOW; // Colore linea trigger
+            break;
+            
+        case MENU_TBASE:
+            menuTitle = "T-BASE";
+            menuColor = WHITE;
+            break;
+        
+        case MENU_PAN:
+            menuTitle = "PAN";
+            menuColor = MAGENTA;
+            break;
+            
+        default:
+            menuTitle = "MENU";
+            menuColor = CYAN;
+            break;
+    }
     
     // Scriviamo il titolo a destra (X=410) sopra i tasti
-    tft_printAt(menuTitle, 420, 5, WHITE, DARKGREY);
+    tft_printAt(menuTitle, 430, 5, menuColor, DARKGREY);
 
     // --- 2. LOGICA TASTI SIDEBAR ---
     if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
@@ -638,6 +631,15 @@ void updateSidebarLabels() {
     }
 
     else if (currentMenu == MENU_TBASE) {
+        
+        drawMenuButton(0, "       ", true, WHITE);
+        drawMenuButton(1, "       ", true, WHITE);
+        drawMenuButton(2, "       ", true, WHITE);
+        drawMenuButton(3, "       ", true, WHITE);
+        drawMenuButton(4, "       ", true, WHITE);
+  
+    }
+    else if (currentMenu == MENU_PAN) {
         
         drawMenuButton(0, "       ", true, WHITE);
         drawMenuButton(1, "       ", true, WHITE);
@@ -839,11 +841,7 @@ void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     }
 }
 
-uint8_t old_ch1_vdiv_idx, old_ch2_vdiv_idx, old_current_time_base_idx = 0xFF;
 
-uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
-uint16_t old_trigger_level_12bit = 0xFFFF;
-uint32_t old_freq = 0xFFFFFFFF;
 
 ui_status_t get_system_status_code(void) {
     if (!is_running) {
@@ -961,6 +959,35 @@ void update_status_bar(bool force) {
     }
 }
 
+int16_t update_view_offset(
+    int16_t param,
+    int16_t min,
+    int16_t max,
+    int16_t step
+)
+{
+    int16_t det  = encoder_read();
+    int16_t diff = det - prev_det_sig;
+    prev_det_sig = det;
+
+    /* nessun movimento */
+    if (diff == 0)
+        return param;
+
+    /* filtro solo per glitch grossi (wrap / rumore) */
+    if (diff > 20 || diff < -20)
+        return param;
+
+    /* calcolo SEMPRE in 32 bit */
+    int32_t tmp = (int32_t)param + (int32_t)diff * (int32_t)step;
+
+    /* clamp corretto */
+    if (tmp < min) tmp = min;
+    if (tmp > max) tmp = max;
+
+    return (int16_t)tmp;
+}
+
 
 
 /************************************************************************************/
@@ -968,7 +995,7 @@ void update_status_bar(bool force) {
 /*          ROW0            ROW1        ROW2                                        */
 /*      12 context       13 CH1       14 CH2                                        */
 /*       9 context       10 TRIG      11 T/Div                                      */
-/*       6 context        7            8 RUN/STOP                                   */
+/*       6 context        7 PAN        8 RUN/STOP                                   */
 /*       3 context        4            5 SINGLE                                     */
 /*       0 context        1            2                                            */
 /********************************************************************************** */
@@ -1002,6 +1029,14 @@ void scope_main(void)
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
+                case 7: // Tasto PAN 
+                    if(currentMenu == MENU_PAN) view_offset = 0; //Riporta in centro
+                    else{
+                        currentMenu = MENU_PAN;
+                        encoderMode = MODE_PAN;
+                        updateSidebarLabels(); // Ridisegna etichette 
+                    }
+                    break;
                 case 8:
                     if(trigger_mode == TRIG_MODE_SINGLE)
                         is_running = true;
@@ -1026,7 +1061,7 @@ void scope_main(void)
                     update_status_bar(true);
                     break;
 
-                case 10: // Ipotetico tasto fisico "Vertical CH1"
+                case 10: // Ipotetico tasto fisico "Trigger"
                     currentMenu = MENU_TRIG;
                     updateSidebarLabels(); // Ridisegna etichette 
                     break;
@@ -1172,6 +1207,21 @@ else if (encoderMode == MODE_TBASE) {
         updateSidebarLabels(); 
     }
 
+}
+else if (encoderMode == MODE_PAN) {
+int16_t new_pan = update_view_offset(view_offset , -PAN_LIMIT, +PAN_LIMIT, PAN_STEP);
+            if (new_pan != prev_view_offset) {
+                
+                // Aggiorna il registro solo se il valore è cambiato
+                osc_write_view_offset(new_pan);
+                osc_arm_readout(); 
+                prev_view_offset = new_pan;
+                view_offset = new_pan; // aggiorna il valore corrente
+                pan_flag = true;
+                /*uart_print("offset ");
+                uart_print_int16(view_offset);
+                uart_print("\r\n");*/
+            }
 }
     acquire_and_draw();
     update_status_bar(false);
