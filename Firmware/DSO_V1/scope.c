@@ -66,6 +66,7 @@ uint8_t encoderMode = MODE_NONE;
 int16_t last_trig_y = -1; // Per cancellare la vecchia linea
 
 uint8_t current_time_base_idx = 0;
+static bool is_running= true;
 
 const char* v_div_labels[] = {
     "10mV", "20mV", "50mV", 
@@ -266,9 +267,9 @@ void tft_drawGrid(uint16_t color) {
 }
 
 
-void osc_read_triggered(uint8_t *a, uint8_t *b)
+/*void osc_read_triggered(uint8_t *a, uint8_t *b)
 {
-    /* SINGLE: se già congelato, NON riarmare acquisizione */
+    // SINGLE: se già congelato, NON riarmare acquisizione 
     if (trigger_mode == TRIG_MODE_SINGLE && freeze) {
         osc_arm_readout();   // solo lettura memoria
     } else {
@@ -287,12 +288,40 @@ void osc_read_triggered(uint8_t *a, uint8_t *b)
         a[i] = REG_CHA;
     }
 
-    /* riarmo trigger SOLO se non in HOLD */
+    // riarmo trigger SOLO se non in HOLD 
     if (!(trigger_mode == TRIG_MODE_SINGLE)) {
         REG_TRIG = 0x01;
     }
-}
+}*/
+void osc_read_triggered(uint8_t *a, uint8_t *b)
+{
+    /* 1. Gestione del blocco acq */
+    if (freeze) {
+        // Se siamo in freeze (Single finito o Stop), leggiamo solo i vecchi dati
+        osc_arm_readout(); 
+    } else {
+        // Aspetta che l'FPGA scatti (Attenzione: osc_wait_ready deve essere non-bloccante 
+        // o avere un timeout se vuoi che i tasti rispondano subito!)
+        osc_wait_ready();
 
+        if (trigger_mode == TRIG_MODE_SINGLE) {
+            freeze = true; // Prossimo giro sarà bloccato
+        }
+        
+        osc_arm_readout(); // Avvia trasferimento dati da FPGA a AVR
+    }
+
+    /* 2. Trasferimento dati */
+    for (int i = 0; i < 400; i++) {
+        b[i] = REG_CHB;
+        a[i] = REG_CHA;
+    }
+
+    /* 3. Riarmo Trigger: Solo se RUNNING e NON in modalità Single appena conclusa */
+    if (is_running && !(trigger_mode == TRIG_MODE_SINGLE && freeze)) {
+        REG_TRIG = 0x01;
+    }
+}
 
 
 
@@ -343,7 +372,10 @@ void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
 }
 
 void acquire_and_draw(){
-    //drawDottedGridFast(8, 0, 254, 238, 40, 4, WHITE);
+    // Se siamo in STOP manuale e non stiamo facendo un SINGLE che ha appena finito
+    if (!is_running && (trigger_mode != TRIG_MODE_SINGLE || freeze)) {
+        return; 
+    }
     tft_drawGrid(LIGHTGREY);
     osc_read_triggered(buffer_a, buffer_b);
     if (ch_visible[0]) {
@@ -813,11 +845,51 @@ uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
 uint16_t old_trigger_level_12bit = 0xFFFF;
 uint32_t old_freq = 0xFFFFFFFF;
 
+ui_status_t get_system_status_code(void) {
+    if (!is_running) {
+        return UI_STATUS_STOP;
+    }
+
+    uint8_t status = REG_TRIG;
+    bool fsm_ready = (status & (1 << READY_BIT));
+
+    if (trigger_mode == TRIG_MODE_SINGLE) {
+        return freeze ? UI_STATUS_STOP : UI_STATUS_WAIT;
+    } 
+    
+    if (trigger_mode == TRIG_MODE_NORMAL) {
+        return fsm_ready ? UI_STATUS_TRIGD : UI_STATUS_WAIT;
+    }
+
+    // Default per AUTO
+    return UI_STATUS_RUN;
+}
+
 void update_status_bar(bool force) {
     uint16_t yPos = MARGIN_Y + TRACE_H + 10;
     uint16_t xStart = MARGIN_X;
-
     setTextSize(1);
+
+    static ui_status_t last_ui_state = 0xFF; // Valore impossibile per forzare il primo disegno
+    ui_status_t current_state = get_system_status_code();
+    if (force || current_state != last_ui_state) {
+        // Solo quando lo stato CAMBIA davvero, facciamo il lavoro pesante
+        char* label;
+        uint16_t color;
+
+        switch (current_state) {
+            case UI_STATUS_STOP:  label = "STOP  ";   color = RED;    break;
+            case UI_STATUS_WAIT:  label = "WAIT  ";   color = YELLOW; break;
+            case UI_STATUS_TRIGD: label = "TRIG'D"; color = GREEN;  break;
+            case UI_STATUS_RUN:   label = "RUN   ";    color = GREEN;  break;
+            default:              label = "???";    color = WHITE;  break;
+        }
+
+        // Qui disegni sul TFT (avviene solo una volta per ogni cambio di stato)
+        // tft_draw_status(label, color); 
+        tft_printAt(label, 10, 5, color, DARKGREY);
+        last_ui_state = current_state;
+    }
 
     // --- CANALE 1 ---
     if(old_ch1_vdiv_idx != ch1_vdiv_idx || old_ch_coupling[0] != ch_coupling[0] || force){
@@ -893,12 +965,12 @@ void update_status_bar(bool force) {
 
 /************************************************************************************/
 /*                                 KEY MAP                                          */
-/*          ROW0            ROW1        ROW2                                            */
-/*      12 context       13 CH1       14 CH2             */
-/*       9 context       10 TRIG      11 T/Div    */
-/*       6 context         7 STEP              */
-/*       3 context                         */
-/*       0 context                        */
+/*          ROW0            ROW1        ROW2                                        */
+/*      12 context       13 CH1       14 CH2                                        */
+/*       9 context       10 TRIG      11 T/Div                                      */
+/*       6 context        7            8 RUN/STOP                                   */
+/*       3 context        4            5 SINGLE                                     */
+/*       0 context        1            2                                            */
 /********************************************************************************** */
 // --- main loop ---
 void scope_main(void)
@@ -930,6 +1002,30 @@ void scope_main(void)
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
+                case 8:
+                    if(trigger_mode == TRIG_MODE_SINGLE)
+                        is_running = true;
+                    else
+                        is_running = !is_running;
+
+                    if (is_running) {
+                        trigger_mode = TRIG_MODE_AUTO;
+                        set_trigger_mode(trigger_mode, trigger_slope, trigger_source);
+                        freeze = false; // Se ripartiamo, sblocchiamo tutto
+                        REG_TRIG = 0x01; // Forza un riarmo immediato della FSM
+                    }
+                    update_status_bar(true);
+                    break;
+                case 5:
+                    trigger_mode = TRIG_MODE_SINGLE;
+                    set_trigger_mode(trigger_mode, trigger_slope, trigger_source);
+                    freeze = false;     // Fondamentale: permette a osc_read_triggered di armare
+                    is_running = true;  // Ci assicuriamo che il loop chiami l'acquisizione
+                    REG_TRIG = 0x01;    // Armiamo la FSM FPGA
+                    //updateSidebarLabels();
+                    update_status_bar(true);
+                    break;
+
                 case 10: // Ipotetico tasto fisico "Vertical CH1"
                     currentMenu = MENU_TRIG;
                     updateSidebarLabels(); // Ridisegna etichette 

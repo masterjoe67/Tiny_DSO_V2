@@ -64,6 +64,13 @@ extern uint8_t buffer_a[BUFFER_TOTAL];
 extern uint8_t buffer_b[BUFFER_TOTAL];
 extern uint8_t buffer_c[BUFFER_TOTAL];
 
+typedef enum {
+    UI_STATUS_STOP = 0,
+    UI_STATUS_WAIT,
+    UI_STATUS_TRIGD,
+    UI_STATUS_RUN
+} ui_status_t;
+
 // Modalità trigger
 typedef enum {
     TRIG_MODE_AUTO = 0,
