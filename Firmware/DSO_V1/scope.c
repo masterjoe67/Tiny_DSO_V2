@@ -141,7 +141,7 @@ void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope, uint8_t source)
 
 
 // funzione per disegnare la traccia sul TFT
-void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted)
+/*void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted)
 {
     const int16_t Y_MIN = MARGIN_Y;            // 25
     const int16_t Y_MAX = MARGIN_Y + TRACE_H;  // 265
@@ -172,6 +172,39 @@ void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y
         // 5. MEMORIZZAZIONE
         // Salviamo il valore esatto (anche se fuori schermo) per il prossimo giro
         old_buffer[i] = y_now;
+    } 
+}*/
+void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted, bool enabled)
+{
+    const int16_t Y_MIN = MARGIN_Y;
+    const int16_t Y_MAX = MARGIN_Y + TRACE_H;
+
+    for (uint16_t i = 0; i < length; i++) {
+        uint16_t x = i + MARGIN_X;
+
+        // 1. Cancellazione sempre attiva (se c'era qualcosa di vecchio)
+        if (old_buffer[i] > Y_MIN && old_buffer[i] < Y_MAX) {
+            tft_drawPixel(x, old_buffer[i], BLACK);
+        }
+
+        // 2. Calcolo e disegno solo se il canale è abilitato
+        if (enabled) {
+            uint8_t raw_data = buffer[i];
+            if (!inverted) raw_data = 255 - raw_data;
+
+            int16_t y_now = (int16_t)(raw_data / 2) + y_offset;
+
+            // Disegno se nei limiti
+            if (y_now > Y_MIN && y_now < Y_MAX) {
+                tft_drawPixel(x, y_now, color);
+            }
+            // Memorizzo la nuova posizione
+            old_buffer[i] = y_now;
+        } else {
+            // Se disattivato, "resetto" il vecchio buffer a un valore fuori schermo
+            // Così al prossimo giro non tenterà di cancellare nulla
+            old_buffer[i] = -100; 
+        }
     } 
 }
 
@@ -343,14 +376,14 @@ void acquire_and_draw(){
     }
     tft_drawGrid(LIGHTGREY);
     osc_read_triggered(buffer_a, buffer_b);
-    if (ch_visible[0]) {
-        draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0]);
-    }
+    //if (ch_visible[0]) {
+        draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0], ch_visible[0]);
+   // }
     
     // Disegna CH2 solo se è visibile
-    if (ch_visible[1]) {
-        draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1]);
-    }
+    //if (ch_visible[1]) {
+        draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1], ch_visible[1]);
+    //}
     draw_trigger_line(trigger_level_12bit, YELLOW, false);
     draw_ground_marker(0, GREEN);
     draw_ground_marker(1, RED);
