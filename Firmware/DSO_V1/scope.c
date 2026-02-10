@@ -84,6 +84,14 @@ uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
 uint16_t old_trigger_level_12bit = 0xFFFF;
 uint32_t old_freq = 0xFFFFFFFF;
 
+Point_t old_a = { 0, 0 };
+Point_t old_b = { 0, 0 };
+Point_t old_c = { 0, 0 };
+Point_t gnd_mark_a[2] = {{ 0, 0 }, { 0, 0 }};
+Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
+Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
+uint16_t old_y_offset_ch[2];
+
 const char* time_base_labels[] = {
     "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
     "100us", "200us", "500us", "1ms",   "2ms",   "5ms", 
@@ -141,40 +149,7 @@ void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope, uint8_t source)
 
 
 // funzione per disegnare la traccia sul TFT
-/*void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted)
-{
-    const int16_t Y_MIN = MARGIN_Y;            // 25
-    const int16_t Y_MAX = MARGIN_Y + TRACE_H;  // 265
-
-    for (uint16_t i = 0; i < length; i++) {
-        uint16_t x = i + MARGIN_X;
-
-        // 1. Dati e Inversione
-        uint8_t raw_data = buffer[i];
-        if (!inverted) raw_data = 255 - raw_data;
-
-        // 2. Calcolo coordinata Y reale (con segno!)
-        int16_t y_now = (int16_t)(raw_data / 2) + y_offset;
-
-        // 3. CANCELLAZIONE SELETTIVA
-        // Usiamo il valore salvato nel vecchio buffer (che deve essere int16_t)
-        // Se il vecchio pixel era visibile, lo cancelliamo
-        if (old_buffer[i] > Y_MIN && old_buffer[i] < Y_MAX) {
-            tft_drawPixel(x, old_buffer[i], BLACK);
-        }
-
-        // 4. DISEGNO SELETTIVO
-        // Disegniamo il nuovo pixel solo se è dentro l'area griglia
-        if (y_now > Y_MIN && y_now < Y_MAX) {
-            tft_drawPixel(x, y_now, color);
-        }
-
-        // 5. MEMORIZZAZIONE
-        // Salviamo il valore esatto (anche se fuori schermo) per il prossimo giro
-        old_buffer[i] = y_now;
-    } 
-}*/
-void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted, bool enabled)
+/*void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted, bool enabled)
 {
     const int16_t Y_MIN = MARGIN_Y;
     const int16_t Y_MAX = MARGIN_Y + TRACE_H;
@@ -203,6 +178,53 @@ void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y
         } else {
             // Se disattivato, "resetto" il vecchio buffer a un valore fuori schermo
             // Così al prossimo giro non tenterà di cancellare nulla
+            old_buffer[i] = -100; 
+        }
+    } 
+}*/
+void draw_trace(uint8_t *buffer, int16_t *old_buffer, uint16_t length, int16_t y_offset, uint16_t color, bool inverted, bool enabled, bool vectors)
+{
+    const int16_t Y_MIN = MARGIN_Y;
+    const int16_t Y_MAX = MARGIN_Y + TRACE_H;
+    
+    int16_t y_prev_new = -100; // Memorizza la Y del punto precedente (nuova traccia)
+    int16_t y_prev_old = -100; // Memorizza la Y del punto precedente (vecchia traccia per cancellazione)
+
+    for (uint16_t i = 0; i < length; i++) {
+        uint16_t x = i + MARGIN_X;
+
+        // --- 1. CANCELLAZIONE ---
+        if (old_buffer[i] > Y_MIN && old_buffer[i] < Y_MAX) {
+            if (vectors && i > 0 && y_prev_old > Y_MIN && y_prev_old < Y_MAX) {
+                // Cancella il vettore precedente
+                tft_drawLine(x - 1, y_prev_old, x, old_buffer[i], BLACK);
+            } else {
+                // Cancella il punto singolo
+                tft_drawPixel(x, old_buffer[i], BLACK);
+            }
+        }
+        y_prev_old = old_buffer[i];
+
+        // --- 2. DISEGNO ---
+        if (enabled) {
+            uint8_t raw_data = buffer[i];
+            if (!inverted) raw_data = 255 - raw_data;
+
+            int16_t y_now = (int16_t)(raw_data / 2) + y_offset;
+
+            if (y_now > Y_MIN && y_now < Y_MAX) {
+                if (vectors && i > 0 && y_prev_new > Y_MIN && y_prev_new < Y_MAX) {
+                    // Disegna vettore dal punto precedente a quello attuale
+                    tft_drawLine(x - 1, y_prev_new, x, y_now, color);
+                } else {
+                    // Disegna punto singolo
+                    tft_drawPixel(x, y_now, color);
+                }
+            }
+            
+            y_prev_new = y_now;
+            old_buffer[i] = y_now; // Memorizza per il prossimo frame
+        } else {
             old_buffer[i] = -100; 
         }
     } 
@@ -312,9 +334,7 @@ static inline void osc_write_view_offset(int16_t offset)
 
 }
 
-Point_t old_a = { 0, 0 };
-Point_t old_b = { 0, 0 };
-Point_t old_c = { 0, 0 };
+
 void drawPanTrack(){
 
     int16_t offset = (TRACE_W / 2) - view_offset + MARGIN_X;
@@ -332,10 +352,7 @@ void drawPanTrack(){
     tft_FillTriangle(a, b, c, WHITE);
 }
 
-Point_t gnd_mark_a[2] = {{ 0, 0 }, { 0, 0 }};
-Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
-Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
-uint16_t old_y_offset_ch[2];
+
 void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
     // 1. Calcoliamo la posizione Y dello zero (valore ADC 128)
     // Usiamo la stessa identica formula della tua draw_trace
@@ -377,12 +394,12 @@ void acquire_and_draw(){
     tft_drawGrid(LIGHTGREY);
     osc_read_triggered(buffer_a, buffer_b);
     //if (ch_visible[0]) {
-        draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0], ch_visible[0]);
+        draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0], ch_visible[0], true);
    // }
     
     // Disegna CH2 solo se è visibile
     //if (ch_visible[1]) {
-        draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1], ch_visible[1]);
+        draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1], ch_visible[1], true);
     //}
     draw_trigger_line(trigger_level_12bit, YELLOW, false);
     draw_ground_marker(0, GREEN);
@@ -776,33 +793,7 @@ int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
     return y_pixel;
 }
 
-/*void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
-    // 1. Mappiamo 0-4095 nei pixel della traccia (che sono 0-127 perché buffer/2)
-    // Se la tua visualizzazione usa (raw_data / 2) + offset, facciamo lo stesso:
-    uint16_t level8 = level12 >> 4; // Portiamo i 12 bit a 8 bit (0-255)
-    
-    uint8_t idx = trigger_source - 1;
-   int16_t y = -(level8 / 2) + y_offset_ch[idx];
 
-    //int16_t y = scale_8bit_to_pixel(level8, 0);
-
-    // 2. Clipping: disegna solo se dentro la griglia
-    if (y > MARGIN_Y && y < (MARGIN_Y + TRACE_H)) {
-        
-            // Qui dovresti ridisegnare la griglia o cancellare
-            // Per ora facciamo una linea nera semplice (o ridisegna griglia)
-            //tft_drawLine(MARGIN_X, last_trig_y, MARGIN_X + TRACE_W, last_trig_y, BLACK);
-            tft_drawFastHLine(MARGIN_X, last_trig_y, TRACE_W, BLACK);
-            // Opzionale: tft_drawGridLine(y); // se hai una funzione per ripristinare i puntini
-        
-            // Disegna la linea Gialla tratteggiata
-            for (uint16_t x = MARGIN_X; x < MARGIN_X + TRACE_W; x += 8) {
-                tft_drawFastHLine(x, y, 4, YELLOW); 
-            }
-        
-        last_trig_y = y;
-    }
-}*/
 
 float read_fpga_frequency() {
     uint32_t period = 0;
@@ -810,10 +801,6 @@ float read_fpga_frequency() {
 
     // Leggiamo i 4 byte in sequenza dal registro REG_FREQ
     // L'FPGA incrementerà internamente l'indice del byte
-   /*period |= (uint32_t)REG_FREQ;         // Byte 0 (LSB)
-    period |= (uint32_t)REG_FREQ << 8;    // Byte 1
-    period |= (uint32_t)REG_FREQ << 16;   // Byte 2
-    period |= (uint32_t)REG_FREQ << 24;   // Byte 3 (MSB)*/
 
     v0 = REG_FREQ0;
     v1 = REG_FREQ1;
