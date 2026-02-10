@@ -70,10 +70,11 @@ architecture rtl of oscilloscope_top is
     ------------------------------------------------------------------
     constant BUFFER_SIZE      : integer := 4096;
 	 constant PTR_BITS         : integer := 12;
-    constant PRE_TRIGGER      : integer := 200;
-    constant POST_TRIGGER_LEN : integer := 255;
+    constant PRE_TRIGGER      : integer := 1024;
+    constant POST_TRIGGER_LEN : integer := 1024;
     constant AUTO_TIMEOUT     : unsigned(15 downto 0) := to_unsigned(2050, 16);
-	 constant PAN_LIMIT : integer := BUFFER_SIZE/2;
+	 constant PAN_LIMIT 			: integer := BUFFER_SIZE/2;
+	 constant VIEW_BEGIN      : integer := 200;
 
     ------------------------------------------------------------------
     -- Segnali Interni
@@ -172,6 +173,8 @@ architecture rtl of oscilloscope_top is
 	 signal trig_hit_raw    : std_logic; -- Il trigger "puro", sempre attivo per il frequenzimetro
 	 signal prev_sample_raw : unsigned(11 downto 0); -- Campione precedente per il trigger raw
 	 signal freq_trig_armed : std_logic := '0'; -- Stato di armamento per il trigger raw
+	 
+	 signal rd_addr_full : signed(PTR_BITS downto 0);
     ------------------------------------------------------------------
     -- Utility function
     ------------------------------------------------------------------
@@ -200,11 +203,31 @@ begin
     -- Read index calculation
     -- Calcolo indice di lettura RAM con base stabile
     ------------------------------------------------------------------
-	 rd_index <= unsigned(
-               signed(rd_base_stable) +
-               view_offset +
-               signed(reg_index_int)
-           );
+--	 rd_index <= unsigned(
+--               signed(rd_base_stable) +
+--               view_offset +
+--               signed(reg_index_int)
+--           );
+	 
+process(rd_base_stable, view_offset, reg_index_int)
+    variable v_addr : integer;
+begin
+    -- 1. Calcoliamo la somma usando gli interi (gestisce il PAN negativo)
+    v_addr := to_integer(rd_base_stable) + 
+              to_integer(view_offset) + 
+              to_integer(reg_index_int);
+
+    -- 2. Applichiamo il modulo 4096 per il buffer circolare.
+    -- In VHDL il modulo su numeri negativi può essere insidioso, 
+    -- quindi usiamo un trucco standard per riportarlo sempre positivo.
+    v_addr := v_addr mod BUFFER_SIZE;
+    if v_addr < 0 then
+        v_addr := v_addr + BUFFER_SIZE;
+    end if;
+
+    -- 3. Riconvertiamo nel puntatore a 12 bit per la RAM
+    rd_index <= to_unsigned(v_addr, PTR_BITS);
+end process;
 
     ------------------------------------------------------------------
     -- Trigger sample selection
@@ -796,7 +819,7 @@ end process;
         elsif rising_edge(clk) then
             if save_trig = '1' then
                 trig_index      <= trig_wr_ptr; 
-                rd_base_latched <= trig_wr_ptr - to_unsigned(PRE_TRIGGER, 10);
+                rd_base_latched <= trig_wr_ptr - to_unsigned(VIEW_BEGIN, PTR_BITS);
             end if;
         end if;
     end process;

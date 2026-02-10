@@ -6397,9 +6397,9 @@ Disassembly of section .text:
     3f4a:	14 cf       	rjmp	.-472    	; 0x3d74 <scope_main+0x10a>
     3f4c:	24 e0       	ldi	r18, 0x04	; 4
     3f4e:	30 e0       	ldi	r19, 0x00	; 0
-    3f50:	4c e8       	ldi	r20, 0x8C	; 140
+    3f50:	48 ec       	ldi	r20, 0xC8	; 200
     3f52:	50 e0       	ldi	r21, 0x00	; 0
-    3f54:	64 e7       	ldi	r22, 0x74	; 116
+    3f54:	68 e3       	ldi	r22, 0x38	; 56
     3f56:	7f ef       	ldi	r23, 0xFF	; 255
     3f58:	80 91 1e 04 	lds	r24, 0x041E	; 0x80041e <view_offset>
     3f5c:	90 91 1f 04 	lds	r25, 0x041F	; 0x80041f <view_offset+0x1>

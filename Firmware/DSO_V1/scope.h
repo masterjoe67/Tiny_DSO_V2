@@ -27,7 +27,7 @@
 #define READY_BIT         1
 #define BUFFER_SIZE       4096
 #define DISPLAY_SAMPLES   255
-#define PAN_LIMIT         140   
+#define PAN_LIMIT         200   
 #define PAN_STEP          4
 
 #define TRACE_W 400
