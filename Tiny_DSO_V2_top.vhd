@@ -74,6 +74,14 @@ COMPONENT top_avr_core_v8
 	);
 END COMPONENT;
 
+COMPONENT clk_divider_100Hz 
+    port (
+        clk_in    : in  std_logic;  -- Ingresso 50 MHz
+        reset_n   : in  std_logic;  -- Reset asincrono NEGATO (Attivo basso)
+        clk_out   : out std_logic   -- Uscita 100 Hz (onda quadra 50%)
+    );
+end COMPONENT;
+
 COMPONENT sine_50hz_hex 
     generic (
         CLK_FREQ : integer := 50000000 -- Il tuo clock (es. 50MHz)

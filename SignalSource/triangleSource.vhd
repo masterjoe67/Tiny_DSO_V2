@@ -18,7 +18,7 @@ architecture rtl of triangle_50hz_pwm is
     -- Accumulatore di fase a 32 bit per precisione frequenza
     signal phase_acc : unsigned(31 downto 0) := (others => '0');
     constant PHASE_INC : unsigned(31 downto 0) := to_unsigned(
-        integer((52.0 * 4294967296.0) / real(CLK_FREQ)), 32);
+        integer((50.0 * 4294967296.0) / real(CLK_FREQ)), 32);
     
     -- Segnali per il valore triangolare e il PWM
     signal tri_val  : unsigned(9 downto 0);

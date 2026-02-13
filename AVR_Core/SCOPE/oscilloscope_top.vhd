@@ -40,29 +40,50 @@ architecture rtl of oscilloscope_top is
     ------------------------------------------------------------------
     type time_div_map_t is array (0 to 19) of unsigned(31 downto 0);
 
-    constant time_div_map : time_div_map_t := (
-        to_unsigned(0, 32),        -- 0: 1us
-        to_unsigned(1, 32),        -- 1: 2us
-        to_unsigned(4, 32),        -- 2: 5us
-        to_unsigned(9, 32),        -- 3: 10us
-        to_unsigned(19, 32),       -- 4: 20us
-        to_unsigned(49, 32),       -- 5: 50us
-        to_unsigned(99, 32),       -- 6: 100us
-        to_unsigned(199, 32),      -- 7: 200us
-        to_unsigned(499, 32),      -- 8: 500us
-        to_unsigned(999, 32),      -- 9: 1ms
-        to_unsigned(1999, 32),     -- 10: 2ms
-        to_unsigned(4999, 32),     -- 11: 5ms
-        to_unsigned(9999, 32),     -- 12: 10ms
-        to_unsigned(19999, 32),    -- 13: 20ms
-        to_unsigned(49999, 32),    -- 14: 50ms
-        to_unsigned(99999, 32),    -- 15: 100ms
-        to_unsigned(199999, 32),   -- 16: 200ms
-        to_unsigned(499999, 32),   -- 17: 500ms
-        to_unsigned(999999, 32),   -- 18: 1s
-        to_unsigned(1999999, 32)   -- 19: 2s
+--    constant time_div_map : time_div_map_t := (
+--        to_unsigned(0, 32),        -- 0: 1us
+--        to_unsigned(1, 32),        -- 1: 2us
+--        to_unsigned(4, 32),        -- 2: 5us
+--        to_unsigned(9, 32),        -- 3: 10us
+--        to_unsigned(19, 32),       -- 4: 20us
+--        to_unsigned(49, 32),       -- 5: 50us
+--        to_unsigned(99, 32),       -- 6: 100us
+--        to_unsigned(199, 32),      -- 7: 200us
+--        to_unsigned(499, 32),      -- 8: 500us
+--        to_unsigned(999, 32),      -- 9: 1ms
+--        to_unsigned(1999, 32),     -- 10: 2ms
+--        to_unsigned(4999, 32),     -- 11: 5ms
+--        to_unsigned(9999, 32),     -- 12: 10ms
+--        to_unsigned(19999, 32),    -- 13: 20ms
+--        to_unsigned(49999, 32),    -- 14: 50ms
+--        to_unsigned(99999, 32),    -- 15: 100ms
+--        to_unsigned(199999, 32),   -- 16: 200ms
+--        to_unsigned(499999, 32),   -- 17: 500ms
+--        to_unsigned(999999, 32),   -- 18: 1s
+--        to_unsigned(1999999, 32)   -- 19: 2s
+--    );
+constant time_div_map : time_div_map_t := (
+        to_unsigned(0, 32),          -- 0: 1us (teorico 0.5, arrotondato a 0)
+        to_unsigned(2, 32),          -- 1: 2us (2 * 1.5 - 1)
+        to_unsigned(6, 32),          -- 2: 5us (5 * 1.5 - 1 = 6.5 -> 6)
+        to_unsigned(14, 32),         -- 3: 10us (10 * 1.5 - 1)
+        to_unsigned(29, 32),         -- 4: 20us (20 * 1.5 - 1)
+        to_unsigned(74, 32),         -- 5: 50us (50 * 1.5 - 1)
+        to_unsigned(149, 32),        -- 6: 100us (100 * 1.5 - 1)
+        to_unsigned(299, 32),        -- 7: 200us
+        to_unsigned(749, 32),        -- 8: 500us
+        to_unsigned(1499, 32),       -- 9: 1ms
+        to_unsigned(2999, 32),       -- 10: 2ms
+        to_unsigned(7499, 32),       -- 11: 5ms
+        to_unsigned(14999, 32),      -- 12: 10ms
+        to_unsigned(29999, 32),      -- 13: 20ms
+        to_unsigned(74999, 32),      -- 14: 50ms
+        to_unsigned(149999, 32),     -- 15: 100ms
+        to_unsigned(299999, 32),     -- 16: 200ms
+        to_unsigned(749999, 32),     -- 17: 500ms
+        to_unsigned(1499999, 32),    -- 18: 1s
+        to_unsigned(2999999, 32)     -- 19: 2s
     );
-
 
 
     ------------------------------------------------------------------
@@ -175,6 +196,12 @@ architecture rtl of oscilloscope_top is
 	 signal freq_trig_armed : std_logic := '0'; -- Stato di armamento per il trigger raw
 	 
 	 signal rd_addr_full : signed(PTR_BITS downto 0);
+	 
+	 signal gate_count   : unsigned(7 downto 0) := (others => '0');
+signal accumulator  : unsigned(31 downto 0) := (others => '0');
+signal v_trig_armed : std_logic := '0';
+signal trig_prev_val : unsigned(11 downto 0) := (others => '0');
+
     ------------------------------------------------------------------
     -- Utility function
     ------------------------------------------------------------------
@@ -253,80 +280,134 @@ end process;
 	 tb_view_full_sign <= std_logic_vector(view_full_sign);
 	 
 
-	
+
 --process(clk, rst_n)
+--    variable gate_count : unsigned(7 downto 0) := (others => '0'); 
+--    variable accumulator : unsigned(31 downto 0) := (others => '0');
 --begin
 --    if rst_n = '0' then
---        freq_counter <= (others => '0');
+--        gate_count := (others => '0');
+--        accumulator := (others => '0');
 --        freq_period_reg <= (others => '0');
 --    elsif rising_edge(clk) then
+--        -- Incrementa l'accumulatore (ora ogni step è 16.66ns @60MHz)
+--        if accumulator /= x"FFFFFFFF" then
+--            accumulator := accumulator + 1;
+--        end if;
+--
 --        if trig_hit_raw = '1' then
---            freq_period_reg <= freq_counter;
---            freq_counter <= (others => '0');
---        elsif freq_counter /= x"FFFFFFFF" then
---            freq_counter <= freq_counter + 1;
+--            -- Calcolo della frequenza: Freq = (64 * 60,000,000) / freq_period_reg
+--            if gate_count >= 63 then 
+--                freq_period_reg <= accumulator; -- LATCH!
+--                accumulator := (others => '0');
+--                gate_count := (others => '0');
+--            else
+--                gate_count := gate_count + 1;
+--            end if;
+--        end if;
+--        
+--        -- Protezione: Timeout ridotto a ~71.5 secondi @60MHz
+--        if accumulator = x"FFFFFFFF" then
+--            gate_count := (others => '0');
+--            freq_period_reg <= (others => '0');
 --        end if;
 --    end if;
 --end process;
+--	
+--	process(clk, rst_n)
+--		 constant HYST : unsigned(11 downto 0) := to_unsigned(20, 12);
+--		 variable v_trig_armed : std_logic := '0'; -- Usiamo una variabile o un segnale dedicato
+--	begin
+--		 if rst_n = '0' then
+--			  trig_hit_raw <= '0';
+--			  v_trig_armed := '0';
+--		 elsif rising_edge(clk) then
+--			  trig_hit_raw <= '0'; -- Impulso di default
+--			  
+--			  -- Logica di trigger SEMPRE ATTIVA (indipendente da state = ARMED)
+--			  if trig_enable = '1' then
+--					if trig_edge = '0' then -- Rising Edge
+--						 if unsigned(trig_sample_sync) < (unsigned(trig_level) - HYST) then
+--							  v_trig_armed := '1';
+--						 elsif v_trig_armed = '1' and (prev_sample < trig_level) 
+--														  and (trig_sample_sync >= trig_level) then
+--							  trig_hit_raw <= '1'; -- Questo va al frequenzimetro
+--							  v_trig_armed := '0';
+--						 end if;
+--					else -- Falling Edge logic...
+--						 -- (stessa cosa per il falling edge)
+--					end if;
+--			  end if;
+--		 end if;
+--	end process;
 
+-- 1. PROCESSO CALCOLO FREQUENZA (Ottimizzato per 60MHz)
 process(clk, rst_n)
-    variable gate_count : unsigned(7 downto 0) := (others => '0'); 
-    variable accumulator : unsigned(31 downto 0) := (others => '0');
 begin
     if rst_n = '0' then
-        gate_count := (others => '0');
-        accumulator := (others => '0');
+        gate_count <= (others => '0');
+        accumulator <= (others => '0');
         freq_period_reg <= (others => '0');
     elsif rising_edge(clk) then
-        -- Incrementa sempre l'accumulatore (40MHz)
+        -- Incremento costante dell'accumulatore
         if accumulator /= x"FFFFFFFF" then
-            accumulator := accumulator + 1;
+            accumulator <= accumulator + 1;
         end if;
 
+        -- Logica di cattura al colpo di trigger
         if trig_hit_raw = '1' then
-            if gate_count >= 63 then -- Raggiunti i 64 impulsi
-                freq_period_reg <= accumulator; -- LATCH!
-                accumulator := (others => '0');
-                gate_count := (others => '0');
+            if gate_count >= 63 then 
+                freq_period_reg <= accumulator; -- LATCH del periodo totale
+                accumulator <= (others => '0'); -- Reset sincronizzato
+                gate_count <= (others => '0');
             else
-                gate_count := gate_count + 1;
+                gate_count <= gate_count + 1;
             end if;
         end if;
-        
-        -- Protezione: se l'accumulatore satura, resetta tutto (timeout 100sec @40MHz)
+
+        -- Watchdog / Timeout (se il segnale sparisce)
         if accumulator = x"FFFFFFFF" then
-            gate_count := (others => '0');
+            gate_count <= (others => '0');
             freq_period_reg <= (others => '0');
         end if;
     end if;
 end process;
-	
-	process(clk, rst_n)
-		 constant HYST : unsigned(11 downto 0) := to_unsigned(20, 12);
-		 variable v_trig_armed : std_logic := '0'; -- Usiamo una variabile o un segnale dedicato
-	begin
-		 if rst_n = '0' then
-			  trig_hit_raw <= '0';
-			  v_trig_armed := '0';
-		 elsif rising_edge(clk) then
-			  trig_hit_raw <= '0'; -- Impulso di default
-			  
-			  -- Logica di trigger SEMPRE ATTIVA (indipendente da state = ARMED)
-			  if trig_enable = '1' then
-					if trig_edge = '0' then -- Rising Edge
-						 if unsigned(trig_sample_sync) < (unsigned(trig_level) - HYST) then
-							  v_trig_armed := '1';
-						 elsif v_trig_armed = '1' and (prev_sample < trig_level) 
-														  and (trig_sample_sync >= trig_level) then
-							  trig_hit_raw <= '1'; -- Questo va al frequenzimetro
-							  v_trig_armed := '0';
-						 end if;
-					else -- Falling Edge logic...
-						 -- (stessa cosa per il falling edge)
-					end if;
-			  end if;
-		 end if;
-	end process;
+
+-- 2. PROCESSO GENERAZIONE TRIGGER HIT (Pulizia Glitch)
+process(clk, rst_n)
+    constant HYST : unsigned(11 downto 0) := to_unsigned(20, 12);
+begin
+    if rst_n = '0' then
+        trig_hit_raw  <= '0';
+        v_trig_armed  <= '0';
+        trig_prev_val <= (others => '0');
+    elsif rising_edge(clk) then
+        trig_hit_raw <= '0'; -- Impulso pulito di 1 clock
+        trig_prev_val <= unsigned(trig_sample_sync); -- Questo è il NOSTRO riferimento precedente
+
+        if trig_enable = '1' then
+            -- RISING EDGE
+            if trig_edge = '0' then 
+                if unsigned(trig_sample_sync) < (unsigned(trig_level) - HYST) then
+                    v_trig_armed <= '1';
+                elsif v_trig_armed = '1' and (trig_prev_val < unsigned(trig_level)) 
+                                         and (unsigned(trig_sample_sync) >= unsigned(trig_level)) then
+                    trig_hit_raw <= '1';
+                    v_trig_armed <= '0';
+                end if;
+            -- FALLING EDGE
+            else 
+                if unsigned(trig_sample_sync) > (unsigned(trig_level) + HYST) then
+                    v_trig_armed <= '1';
+                elsif v_trig_armed = '1' and (trig_prev_val > unsigned(trig_level)) 
+                                         and (unsigned(trig_sample_sync) <= unsigned(trig_level)) then
+                    trig_hit_raw <= '1';
+                    v_trig_armed <= '0';
+                end if;
+            end if;
+        end if;
+    end if;
+end process;
 
     ------------------------------------------------------------------
     -- Stable read base logic

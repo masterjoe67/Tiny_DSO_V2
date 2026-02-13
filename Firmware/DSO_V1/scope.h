@@ -2,7 +2,7 @@
 #ifndef SCOPE_H
 #define SCOPE_H
 
-#define F_SYS_CLK 40000000UL
+#define F_SYS_CLK 60000000UL
 #define REG_INDEX   _SFR_IO8(0x3C) //(*(volatile uint8_t*)0x81)
 #define REG_CHA     _SFR_IO8(0x13)
 #define REG_CHB     _SFR_IO8(0x14)

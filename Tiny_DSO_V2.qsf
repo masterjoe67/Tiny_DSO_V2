@@ -121,8 +121,8 @@ set_location_assignment PIN_T15 -to tft_dc
 set_location_assignment PIN_F13 -to tft_cs
 set_global_assignment -name ENABLE_SIGNALTAP OFF
 set_global_assignment -name USE_SIGNALTAP_FILE stp2.stp
-set_global_assignment -name VHDL_FILE count100Hz.vhd
-set_global_assignment -name QIP_FILE count100Hz.qip
+set_global_assignment -name SDC_FILE Tiny_DSO_V2.sdc
+set_global_assignment -name VHDL_FILE SignalSource/clk_divider_100Hz.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/RAMAdrDcd.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/MemRdMux.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/ArbiterAndMux.vhd
@@ -190,4 +190,5 @@ set_global_assignment -name VHDL_FILE SignalSource/sin_Source.vhd
 set_global_assignment -name VHDL_FILE SignalSource/triangleSource.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/st7796_fast_ctrl.vhd
 set_global_assignment -name SIGNALTAP_FILE stp2.stp
+set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

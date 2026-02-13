@@ -6,7 +6,7 @@ CC        = avr-gcc
 AS        = avr-as
 OBJCOPY   = avr-objcopy
 OBJDUMP   = avr-objdump
-F_CPU     = 40000000UL
+F_CPU     = 60000000UL
 
 # --- ELENCO FILE SORGENTE ---
 # aggiungi qui i tuoi file .c

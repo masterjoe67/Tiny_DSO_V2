@@ -292,7 +292,7 @@ void tft_drawGrid(uint16_t color) {
     }
 }
 
-void osc_read_triggered(uint8_t *a, uint8_t *b)
+void osc_read_triggered2(uint8_t *a, uint8_t *b)
 {
     /* 1. Gestione del blocco acq */
     if (freeze) {
@@ -317,6 +317,41 @@ void osc_read_triggered(uint8_t *a, uint8_t *b)
     }
 
     /* 3. Riarmo Trigger: Solo se RUNNING e NON in modalità Single appena conclusa */
+    if (is_running && !(trigger_mode == TRIG_MODE_SINGLE && freeze)) {
+        REG_TRIG = 0x01;
+    }
+}
+void osc_read_triggered(uint8_t *a, uint8_t *b)
+{
+    /* 1. Controllo preliminare: se siamo in freeze, non aggiorniamo nulla */
+    if (freeze) {
+        // Opzionale: se serve rinfrescare il readout hardware
+        // osc_arm_readout(); 
+        return; 
+    }
+
+    /* 2. Controllo Trigger NON BLOCCANTE */
+    // Verifichiamo se l'FPGA è READY. Se non lo è, usciamo immediatamente.
+    // In questo modo i buffer 'a' e 'b' restano intatti con i vecchi dati.
+    if (!(REG_TRIG & (1 << READY_BIT))) {
+        return; // Torna al main: i tasti e il Pan risponderanno subito!
+    }
+
+    /* 3. Se arriviamo qui, l'FPGA è scattata (Dati pronti!) */
+    if (trigger_mode == TRIG_MODE_SINGLE) {
+        freeze = true; // Blocca i futuri aggiornamenti
+    }
+    
+    // Avvia trasferimento dati da FPGA a AVR
+    osc_arm_readout(); 
+
+    /* 4. Trasferimento dati (Dura pochi microsecondi a 60MHz) */
+    for (int i = 0; i < 400; i++) {
+        b[i] = REG_CHB;
+        a[i] = REG_CHA;
+    }
+
+    /* 5. Riarmo Trigger automatico */
     if (is_running && !(trigger_mode == TRIG_MODE_SINGLE && freeze)) {
         REG_TRIG = 0x01;
     }
@@ -386,7 +421,7 @@ void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
     drawPanTrack();
 }
 
-void acquire_and_draw(){
+void acquire_and_draw2(){
     // Se siamo in STOP manuale e non stiamo facendo un SINGLE che ha appena finito
     if (!is_running && (trigger_mode != TRIG_MODE_SINGLE || freeze)) {
         return; 
@@ -407,6 +442,32 @@ void acquire_and_draw(){
     //draw_trace(buffer_a, old_buffer_a, 400, CH0_Y, GREEN);
     //draw_trace(buffer_b, old_buffer_b, 400, CH0_Y, RED);
     
+}
+
+void acquire_and_draw(){
+    // 1. ACQUISIZIONE (Condizionale)
+    // Proviamo a leggere solo se siamo in RUN o in un SINGLE attivo
+    //if (is_running || (trigger_mode == TRIG_MODE_SINGLE && !freeze)) {
+    if (is_running || (trigger_mode == TRIG_MODE_SINGLE && !freeze) || pan_flag) {
+        osc_read_triggered(buffer_a, buffer_b);
+    }
+
+    // 2. DISEGNO (Sempre attivo!)
+    // Da qui in poi, il codice deve girare SEMPRE, anche in STOP.
+    // Solo così il PAN può funzionare sui dati vecchi.
+    
+    tft_drawGrid(LIGHTGREY);
+
+    // Disegna CH1 (buffer_a contiene l'ultima cattura, il pan lo sposta dentro draw_trace)
+    draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0], ch_visible[0], true);
+    
+    // Disegna CH2
+    draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1], ch_visible[1], true);
+    
+    // UI e Marker (Sempre visibili per poterli muovere in STOP)
+    draw_trigger_line(trigger_level_12bit, YELLOW, false);
+    draw_ground_marker(0, GREEN);
+    draw_ground_marker(1, RED);
 }
 
 void drawMenuButton(uint8_t index, const char* label, bool active, uint16_t color) {
@@ -604,17 +665,17 @@ void updateSidebarLabels() {
     uint16_t menuColor; // Variabile per il colore del titolo
     switch (currentMenu) {
         case MENU_CH1:
-            menuTitle = "CH 1";
+            menuTitle = " CH 1 ";
             menuColor = GREEN;  // Colore traccia 1
             break;
             
         case MENU_CH2:
-            menuTitle = "CH 2";
+            menuTitle = " CH 2";
             menuColor = RED;    // Colore traccia 2
             break;
             
         case MENU_TRIG:
-            menuTitle = "TRIG";
+            menuTitle = " TRIG ";
             menuColor = YELLOW; // Colore linea trigger
             break;
             
@@ -624,18 +685,18 @@ void updateSidebarLabels() {
             break;
         
         case MENU_PAN:
-            menuTitle = "PAN";
+            menuTitle = " PAN  ";
             menuColor = MAGENTA;
             break;
             
         default:
-            menuTitle = "MENU";
+            menuTitle = " MENU ";
             menuColor = CYAN;
             break;
     }
     
     // Scriviamo il titolo a destra (X=410) sopra i tasti
-    tft_printAt(menuTitle, 430, 5, menuColor, DARKGREY);
+    tft_printAt(menuTitle, 425, 5, menuColor, DARKGREY);
 
     // --- 2. LOGICA TASTI SIDEBAR ---
     if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
@@ -793,8 +854,6 @@ int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
     return y_pixel;
 }
 
-
-
 float read_fpga_frequency() {
     uint32_t period = 0;
     uint8_t v0, v1, v2, v3 = 0;
@@ -814,16 +873,39 @@ float read_fpga_frequency() {
 
     
    
-    float freq = 2560000000.0f / (float)period;
+    //float freq = 2560000000.0f / (float)period; //40MHz
+    float freq = 3840000000.0f / (float)period;
     /*uart_print("Freq ");
     uart_print_float(new_period, 1);
     uart_print("\r\n");*/
     if (period == 0) return 0;
     return freq;
+    
+
+
+    // Calcola la frequenza SOLO se siamo in RUN
+    // o se abbiamo appena catturato un SINGLE.
+    // NON calcolarla mentre muovi il Pan in STOP!
+    if (is_running && !pan_flag) {
+        v0 = REG_FREQ0;
+        v1 = REG_FREQ1;
+        v2 = REG_FREQ2;
+        v3 = REG_FREQ3;
+
+        period = ((uint32_t)v3 << 24) | 
+                ((uint32_t)v2 << 16) | 
+                ((uint32_t)v1 << 8)  | 
+                (uint32_t)v0;
+
+        if (period > 0) {
+            float freq = 3840000000.0f / (float)period;
+            // Aggiorna il valore a video
+        }
+    } else if (freeze) {
+        // In STOP, non ricalcolare: mantieni l'ultimo valore valido a schermo
+        // così la cifra non sballa mentre ti muovi nella traccia.
+    }
 }
-
-
-
 
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     // 1. Portiamo a 8 bit (0-255)
@@ -860,8 +942,6 @@ void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
         }
     }
 }
-
-
 
 ui_status_t get_system_status_code(void) {
     if (!is_running) {
