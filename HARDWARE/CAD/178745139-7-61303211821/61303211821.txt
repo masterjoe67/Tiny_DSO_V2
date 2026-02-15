@@ -1,0 +1,13 @@
+﻿"Symbol";"Value";"Unit";
+"TraceParts.PartNumber";"10-29022016-125704";"";
+"REFERENCE";"61303211821";"";
+"rs_stock_number";"8267191";"";
+"TraceParts.PartTitle";"Connettore femmina per circuito stampato Wurth Elektronik Scheda - Scheda, 32 vie, 1 fila, passo 2.54mm";"";
+"SUPPLIER_NAME";"RS Components";"";
+"Buy_Now";"https://uk.rs-online.com/web/p/products/8267191?cm_mmc=en-ds-_-mcad-_-traceparts-_-8267191'";"";
+"SUPPLIER";"Wurth Elektronik";"";
+"DESIGN";"Connettore femmina per circuito stampato Wurth Elektronik Scheda - Scheda, 32 vie, 1 fila, passo 2.54mm";"";
+"TraceParts.InstanceId";"10-29022016-125704U9OQYDVX2U94QAPRUT0A847B";"";
+"TRACEPARTS";"TRACEPARTS";"";
+"TraceParts.PartLanguage";"it";"";
+"TraceParts.PartVersion";"1.0.5";"";
