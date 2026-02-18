@@ -3,13 +3,10 @@
 #include <stdbool.h>
 #include "Peripheral/st7798.h"
 #include "Peripheral/input.h"
+#include "Peripheral/uart.h"
 #include "scope.h"
 
 
-// offset verticale per le tre tracce
-#define CH0_Y  60
-#define CH1_Y  120
-#define CH2_Y  180
 
 #define PRE_TRIGGER       200
 #define POST_TRIGGER      200
@@ -67,6 +64,7 @@ int16_t last_trig_y = -1; // Per cancellare la vecchia linea
 
 uint8_t current_time_base_idx = 0;
 static bool is_running= true;
+
 
 const char* v_div_labels[] = {
     "10mV", "20mV", "50mV", 
@@ -1088,7 +1086,80 @@ int16_t update_view_offset(
     return (int16_t)tmp;
 }
 
+// Valori di default per gli encoder (minimo, massimo step, valore iniziale)
+#define OFFSET_Y_MIN -50
+#define OFFSET_Y_MAX 250
+#define OFFSET_Y_STEP 2
+#define OFFSET_Y1_C_VAL 120
+#define OFFSET_Y2_C_VAL 120
 
+#define VDIVCH_MIN 1
+#define VDIVCH_MAX 10
+#define VDIVCH_STEP 1
+#define VDIVCH_C_VAL 5
+
+#define TDIV_MIN 0
+#define TDIV_MAX 16
+#define TDIV_STEP 1
+#define TDIV_C_VAL 11
+
+void write_encoder(uint8_t encoder_idx, int16_t value) {
+    switch (encoder_idx) {
+        case 0: // Encoder 0 controlla la posizione verticale di CH1
+            configure_encoder(0, PARAM_MIN, OFFSET_Y_MIN);
+            configure_encoder(0, PARAM_MAX, OFFSET_Y_MAX);
+            configure_encoder(0, PARAM_STEP, OFFSET_Y_STEP);
+            configure_encoder(0, PARAM_C_VAL, value);
+            break;
+        case 1: // Encoder 1 Volt/Div CH1
+            configure_encoder(1, PARAM_MIN, VDIVCH_MIN);
+            configure_encoder(1, PARAM_MAX, VDIVCH_MAX);
+            configure_encoder(1, PARAM_STEP, VDIVCH_STEP);
+            configure_encoder(1, PARAM_C_VAL, value);
+            break;    
+        case 2: // Encoder 2 controlla la posizione verticale di CH2
+            configure_encoder(2, PARAM_MIN, OFFSET_Y_MIN);
+            configure_encoder(2, PARAM_MAX, OFFSET_Y_MAX);
+            configure_encoder(2, PARAM_STEP, OFFSET_Y_STEP);
+            configure_encoder(2, PARAM_C_VAL, value);
+            break;
+        case 3: // Encoder 1 Volt/Div CH1
+            configure_encoder(3, PARAM_MIN, VDIVCH_MIN);
+            configure_encoder(3, PARAM_MAX, VDIVCH_MAX);
+            configure_encoder(3, PARAM_STEP, VDIVCH_STEP);
+            configure_encoder(3, PARAM_C_VAL, value);
+            break;        
+        case 4: // Encoder 4 controlla la base dei tempi
+            configure_encoder(4, PARAM_MIN, TDIV_MIN);
+            configure_encoder(4, PARAM_MAX, TDIV_MAX);
+            configure_encoder(4, PARAM_STEP, TDIV_STEP);
+            configure_encoder(4, PARAM_C_VAL, value);
+            break;
+        default:
+            
+            break;
+    }
+}
+
+
+void conf_encoder() {
+    // Encoder 0: Posizione traccia CH1
+    write_encoder(0, OFFSET_Y1_C_VAL); // Impostiamo il valore iniziale
+
+    // Encoder 1: Volt/Div CH1
+    write_encoder(1, VDIVCH_C_VAL); // Impostiamo il valore iniziale
+
+    // Encoder 2: Posizione traccia CH2
+    write_encoder(2, OFFSET_Y2_C_VAL); // Impostiamo il valore iniziale
+
+
+    // Encoder 3: Volt/Div CH2
+    write_encoder(3, VDIVCH_C_VAL); // Impostiamo il valore iniziale
+
+    // Encoder 4: T/Div (0 a 16, parte da 11, step 1)
+    write_encoder(4, TDIV_C_VAL); // Impostiamo il valore iniziale
+
+}
 
 /************************************************************************************/
 /*                                 KEY MAP                                          */
@@ -1104,6 +1175,7 @@ void scope_main(void)
 {
     uint8_t key, rep;
     uint8_t new_sel;
+    conf_encoder();
     drawStaticInterface();
     update_status_bar(true);
     set_base_time(11);
@@ -1112,10 +1184,7 @@ void scope_main(void)
    while(1)
     {
         pan_flag = false;
-
         uint8_t ev = 0xff;
-
-
         if (keypad_poll(&key, &rep)) {
             //ui_handle_key(key, rep);
             ev = key;
@@ -1126,6 +1195,9 @@ void scope_main(void)
         
         
         if(ev != 0xFF){
+            uart_print("Event: ");
+            uart_print_hex(ev);
+            uart_print("\r\n");
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
@@ -1177,6 +1249,14 @@ void scope_main(void)
                 case 14: // Ipotetico tasto fisico "Vertical CH2"
                     currentMenu = MENU_CH2;
                     updateSidebarLabels(); // Ridisegna etichette 
+                    break;
+                case 15: // Tasto encoder per la posizione verticale (Y-POS)
+                    write_encoder(0, OFFSET_Y1_C_VAL); // Reset posizione Y CH1
+                
+                    break;
+                case 16: // Tasto encoder per la posizione verticale (Y-POS)
+                    write_encoder(2, OFFSET_Y2_C_VAL); // Reset posizione Y CH2
+                
                     break;
             }
             switch (currentMenu){
@@ -1265,6 +1345,25 @@ void scope_main(void)
 
            
         }
+
+    update_all_encoders();
+
+    new_sel = encoder_values[4];
+    if (new_sel != prev_time_div_sel) {
+        // Aggiorna il registro solo se il valore è cambiato
+        REG_BASETIME = new_sel;
+        prev_time_div_sel = new_sel;
+        time_div_sel = new_sel; // aggiorna il valore corrente
+        time_div_sel_changed = true;
+        current_time_base_idx =time_div_sel;
+        updateSidebarLabels(); 
+    }
+
+    y_offset_ch[0] = encoder_values[0]; // Aggiorna posizione Y CH1
+    y_offset_ch[1] = encoder_values[2]; // Aggiorna posizione Y CH2
+
+    ch1_vdiv_idx = encoder_values[1]; // Aggiorna Volt/Div CH1
+    ch2_vdiv_idx = encoder_values[3]; // Aggiorna Volt/Div
 
 // Nel loop dell'encoder (tasto 0 attivo)
 if (encoderMode == MODE_Y_POS) {

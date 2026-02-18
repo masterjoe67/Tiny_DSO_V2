@@ -53,7 +53,6 @@ entity top_avr_core_v8 is port(
 	ADC_miso		   : in    std_logic;
 	ADC_mosi  		: out std_logic;
 	
-	-- Debouncer
 	--keys		: in    std_logic_vector(7 downto 0);
 	key_rows 		: in  std_logic_vector(4 downto 0); -- 5 INGRESSI (pull-up)
 	key_cols 		: out std_logic_vector(2 downto 0); -- 3 USCITE
@@ -62,10 +61,11 @@ entity top_avr_core_v8 is port(
 	enc_a		: in    std_logic;
 	enc_b		: in    std_logic;
 	
-	--PWM generator
-	AH, AL,
-   BH, BL,
-   CH, CL    : out std_logic
+	s_enc_a        : in  std_logic_vector(6 downto 0);
+   s_enc_b        : in  std_logic_vector(6 downto 0);
+	enc_keys_i     : in  std_logic_vector(3 downto 0) -- 4 TASTI DEGLI ENCODER
+	
+
 	);
 
 end top_avr_core_v8;
@@ -145,6 +145,9 @@ signal debounch_reg_out_en   : std_logic;
 --Encoder Reg
 signal encoder_reg_dbusout  : std_logic_vector (7 downto 0);
 signal encoder_reg_out_en   : std_logic;
+
+signal s_encoder_reg_dbusout  : std_logic_vector (7 downto 0);
+signal s_encoder_reg_out_en   : std_logic;
 
 --Scope
 signal scope_reg_dbusout  : std_logic_vector (7 downto 0);
@@ -448,43 +451,11 @@ PORTB_Not_Impl:if not CImplPORTB generate
  portb <= (others => 'Z');	
 end generate; 
 
--- ******************  PORTC **************************		
---PORTC_Impl:if CImplPORTC generate
---PORTC_COMP:component pport 
---	generic map (PPortNum => 2)
---	port map(
---	                   -- AVR Control
---               ireset     => core_ireset,
---               cp2	      => clk4M, -- clk, 
---               adr        => core_adr,
---               dbus_in    => core_dbusout,
---               dbus_out   => portc_dbusout,
---               iore       => core_iore,
---               iowe       => core_iowe,
---               out_en     => portc_out_en,
---			            -- External connection
---			   portx      => PortCReg,
---			   ddrx       => DDRCReg,
---			   pinx       => portc);
---
----- PORTC connection to the external multiplexer
---io_port_out(7) <= portc_dbusout;
---io_port_out_en(7) <= portc_out_en;
---
----- Tri-state control for PORTB
---PortCZCtrl:for i in portc'range generate
---portb(i) <= PortCReg(i) when DDRCReg(i)='1' else 'Z'; 	
---end generate;
---
---end generate;
---
---PORTC_Not_Impl:if not CImplPORTC generate
--- portc <= (others => 'Z');	
---end generate; 
+
 	
 -- ************************************************
 	
--- Debouncer	
+-- Keyboard	
 
 Debouncer: entity work.keypad_5x3 
     port map(
@@ -494,6 +465,7 @@ Debouncer: entity work.keypad_5x3
         -- GPIO
         rows_i 		=> key_rows,
 		  cols_o 		=> key_cols,
+		  enc_keys_i   => enc_keys_i, -- 4 TASTI DEGLI ENCODER
 
         -- MMIO
         mmio_we    	=> core_iowe,
@@ -527,7 +499,23 @@ encoder:entity work.mmio_encoder port map(
 	io_port_out(9) <= encoder_reg_dbusout;
 	io_port_out_en(9) <= encoder_reg_out_en;
 	
-
+smart_encoder:entity work.SmartEncoderBank
+    port map(
+        clk          => core_cp2,
+        rst_n        => core_ireset,
+        -- Hardware Encoder (14 pin)
+        enc_a        => s_enc_a,
+        enc_b        => s_enc_b,
+        -- Bus Interfaccia
+        addr_in      => core_adr,
+        data_in      => core_dbusout,
+        data_out     => s_encoder_reg_dbusout,
+        iowe         => core_iowe,
+        iore         => core_iore,
+        out_en       => s_encoder_reg_out_en
+    );
+io_port_out(6) <= s_encoder_reg_dbusout;
+io_port_out_en(6) <= s_encoder_reg_out_en;
 	
 
 
@@ -542,8 +530,7 @@ core_irqlines(22 downto 20) <= ( others => '0');
 -- Unused out_en
 io_port_out_en(10 to 15) <= (others => '0');
 io_port_out(10 to 15) <= (others => (others => '0'));
-io_port_out(6) <= (others => '0');
-io_port_out_en(6) <= '0';
+
 
 
 --****************** Timer/Counter **************************

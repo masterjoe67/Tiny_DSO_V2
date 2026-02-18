@@ -52,24 +52,41 @@ component mmio_encoder is
   );
 end component;
 
+component SmartEncoderBank is
+    port (
+        clk          : in  std_logic;
+        rst_n        : in  std_logic;
+        -- Hardware Encoder (14 pin)
+        enc_a        : in  std_logic_vector(6 downto 0);
+        enc_b        : in  std_logic_vector(6 downto 0);
+        -- Bus Interfaccia
+        addr_in      : in  std_logic_vector(6 downto 0); 
+        data_in      : in  std_logic_vector(7 downto 0);
+        data_out     : out std_logic_vector(7 downto 0);
+        iowe         : in  std_logic;
+        iore         : in  std_logic;
+        out_en       : out std_logic  -- ABILITAZIONE BUS DATI
+    );
+end component;
 
 
 component keypad_5x3 is
     port (
-        clk   			: in  std_logic;
-        rst_n 			: in  std_logic;
+        clk             : in  std_logic;
+        rst_n           : in  std_logic;
 
         -- GPIO
-        rows_i 		: in  std_logic_vector(4 downto 0); -- 5 INGRESSI (pull-up)
-		  cols_o 		: out std_logic_vector(2 downto 0); -- 3 USCITE
+        rows_i          : in  std_logic_vector(4 downto 0); -- 5 INGRESSI matrice
+        cols_o          : out std_logic_vector(2 downto 0); -- 3 USCITE matrice
+        enc_keys_i      : in  std_logic_vector(3 downto 0); -- 4 TASTI DEGLI ENCODER
 
         -- MMIO
-        mmio_we    	: in  std_logic;
-		  mmio_re    	: in  std_logic;
-        mmio_addr  	: in  std_logic_vector(6 downto 0); -- 3 registri
-        mmio_wdata 	: in  std_logic_vector(7 downto 0);
-        mmio_rdata 	: out std_logic_vector(7 downto 0);
-		  out_en     	: out std_logic
+        mmio_we         : in  std_logic;
+        mmio_re         : in  std_logic;
+        mmio_addr       : in  std_logic_vector(6 downto 0);
+        mmio_wdata      : in  std_logic_vector(7 downto 0);
+        mmio_rdata      : out std_logic_vector(7 downto 0);
+        out_en          : out std_logic
     );
 end component;
 

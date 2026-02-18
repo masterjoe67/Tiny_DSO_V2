@@ -25,6 +25,18 @@
 #define KEY_CLEAR     (1 << 1)
 
 
+// Indirizzi MMIO definiti nel tuo sistema
+#define ENC_REG_CONF  _SFR_IO8(0x04) // Scrittura (Config)
+#define ENC_REG_VAL_L _SFR_IO8(0x06) // Lettura (Byte basso)
+#define ENC_REG_VAL_H _SFR_IO8(0x05) // Lettura (Byte alto)
+
+// Identificatori dei Parametri (Bit 3:2 del primo byte)
+#define PARAM_C_VAL  0x00
+#define PARAM_MIN    0x01
+#define PARAM_MAX    0x02
+#define PARAM_STEP   0x03
+
+
 #define ENC_VAL_L   (*(volatile uint8_t *)0x3c)
 #define ENC_VAL_H  (*(volatile uint8_t *)0x3D)
 
@@ -51,6 +63,8 @@ typedef enum {
 } keycode_t;
 
 
+extern int16_t encoder_values[7];
+
 void keypad_init(void);
 uint8_t keypad_poll(uint8_t *key, uint8_t *repeat);
 
@@ -63,6 +77,10 @@ uint16_t update_param_16(uint16_t param, uint16_t min, uint16_t max, uint16_t st
 int16_t update_param_16_signed(int16_t param, int16_t min, int16_t max, int16_t step);
 uint8_t update_param_8(uint8_t param, uint8_t min, uint8_t max, uint8_t step);
 
+
+
+void configure_encoder(uint8_t id, uint8_t param, int16_t value) ;
+int16_t read_encoder(uint8_t id);
 
 // encoder movement: returns -1,0,+1 for rotation since last poll
 int8_t encoder_get_delta(void);

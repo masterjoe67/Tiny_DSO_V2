@@ -125,22 +125,10 @@ constant PORTC_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16
 constant DDRC_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#14#);
 constant PINC_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#13#);
 
--- PWM_Reg
---constant BUF_0  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#00#);
---constant BUF_1  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#01#);
---constant BUF_2  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#02#);
---constant BUF_3  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#03#);
-constant COMMIT  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#04#);
-constant RSEL  	  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#05#);
-constant CTRL       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#06#);
+-- Free
 constant MODE       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#07#);
 
--- Debounce_Reg
---constant OFF_DB  		: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#10#);
---constant OFF_EVT 		: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#11#);
---constant OFF_MASK 	: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#12#);
---constant OFF_CLEAR  	: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#08#);
-
+-- Keyboard
 constant KEY_STATUS  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#10#);
 constant KEY_CODE 	: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#11#);
 constant KEY_CTRL 	: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#12#);
@@ -150,6 +138,11 @@ constant KEY_CTRL 	: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#12#
 constant ENC_VAL_H     : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#1D#);
 constant ENC_VAL_L     : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#1C#);
 constant ENC_BASE 	  : std_logic_vector(3 downto 0) := "0111";
+
+-- Encoder NEW
+constant ENC_INDEX  	  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#04#);
+constant ENC_DATA_HI   : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#05#);
+constant ENC_DATA_LO   : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#06#);
 
 --Scope 
 constant REG_CHA       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#13#);
@@ -177,16 +170,6 @@ constant PPortAdrArray : PPortAdrTblArray_Type := ((PORTA_Address,DDRA_Address,P
 
 -- ***************************************************************************************
 
-
-	
--- Analog to digital converter
---constant ADCL_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#04#);
---constant ADCH_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#05#);
---constant ADCSR_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#06#);
---constant ADMUX_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#07#);
-
--- Analog comparator
---constant ACSR_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#08#);
 
 -- Watchdog
 constant WDTCR_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#21#);

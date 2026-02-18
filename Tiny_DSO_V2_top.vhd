@@ -27,6 +27,26 @@ ENTITY Tiny_DSO_V2_top IS
 		tft_dc      : out std_logic;
 		tft_rst     : out std_logic;
 		
+			-- SMART ENCODER
+		ENC_TBASE_A 	 :  IN  STD_LOGIC;
+		ENC_TBASE_B 	 :  IN  STD_LOGIC;
+		ENC_CH_1_POS_A :  IN  STD_LOGIC;
+		ENC_CH_1_POS_B :  IN  STD_LOGIC;
+		ENC_CH_1_POS_K :  IN  STD_LOGIC;
+		ENC_CH_1_GAIN_A :  IN  STD_LOGIC;
+		ENC_CH_1_GAIN_B :  IN  STD_LOGIC;
+		ENC_CH_2_POS_A :  IN  STD_LOGIC;
+		ENC_CH_2_POS_B :  IN  STD_LOGIC;
+		ENC_CH_2_POS_K :  IN  STD_LOGIC;
+		ENC_CH_2_GAIN_A :  IN  STD_LOGIC;
+		ENC_CH_2_GAIN_B :  IN  STD_LOGIC;		
+		ENC_TRIG_POS_A :  IN  STD_LOGIC;
+		ENC_TRIG_POS_B :  IN  STD_LOGIC;
+		ENC_TRIG_POS_K :  IN  STD_LOGIC;
+		ENC_PAN_POS_A :  IN  STD_LOGIC;
+		ENC_PAN_POS_B :  IN  STD_LOGIC;
+		ENC_PAN_POS_K :  IN  STD_LOGIC;
+		
 		ADC_miso :  IN  STD_LOGIC;
 		ADC_sclk :  OUT  STD_LOGIC;
 		ADC_cs_n :  OUT  STD_LOGIC;
@@ -41,36 +61,53 @@ END Tiny_DSO_V2_top;
 
 ARCHITECTURE rtl OF Tiny_DSO_V2_top IS 
 
-COMPONENT top_avr_core_v8
-	PORT(nrst : IN STD_LOGIC;
-		 clk : IN STD_LOGIC;
-		 ck50 : IN STD_LOGIC;
-		 clk_spi : IN STD_LOGIC;
-		 rxd : IN STD_LOGIC;
-		 INT0 : IN STD_LOGIC;
-		 TMS : IN STD_LOGIC;
-		 TCK : IN STD_LOGIC;
-		 TDI : IN STD_LOGIC;
-		 TRSTn : IN STD_LOGIC;
-		 ADC_miso : IN STD_LOGIC;
-		 enc_a : IN STD_LOGIC;
-		 enc_b : IN STD_LOGIC;
-		 INTx : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
-		 key_rows : IN STD_LOGIC_VECTOR(4 DOWNTO 0);
-		 porta : INOUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-		 portb : INOUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-		 txd : OUT STD_LOGIC;
-		 TDO : OUT STD_LOGIC;
-		 ADC_sclk : OUT STD_LOGIC;
-		 ADC_cs_n : OUT STD_LOGIC;
-		 ADC_mosi : OUT STD_LOGIC;
-		 tft_sclk    : out std_logic;
-		 tft_mosi    : out std_logic;
-		 tft_cs      : out std_logic;
-		 tft_dc      : out std_logic;
-		 tft_rst     : out std_logic;
+COMPONENT top_avr_core_v8 PORT(
+	nrst   : in    std_logic;
+	clk    : in    std_logic;
+	ck50   : in    std_logic;
+	clk_spi : IN STD_LOGIC;
+	-- Port 
+	porta  : inout std_logic_vector(7 downto 0);
+	portb  : inout std_logic_vector(7 downto 0);
+	--portc  : inout std_logic_vector(7 downto 0);
+	-- UART 
+	rxd    : in    std_logic;
+	txd    : out   std_logic;
+	-- TFT SPI
+	tft_sclk    : out std_logic;
+	tft_mosi    : out std_logic;
+	tft_cs      : out std_logic;
+	tft_dc      : out std_logic;
+	tft_rst     : out std_logic;
+	-- External interrupts
+	INTx   : in    std_logic_vector(7 downto 0); 
+	INT0	 : in    std_logic;
 
-		 key_cols : OUT STD_LOGIC_VECTOR(2 DOWNTO 0)
+	-- JTAG related signals
+	TMS    : in    std_logic;
+	TCK	 : in    std_logic;
+	TDI    : in    std_logic;
+	TDO    : out   std_logic;
+	TRSTn  : in    std_logic; -- Optional JTAG input
+	
+   --ADC SPI
+   ADC_sclk	    	: out   std_logic;
+	ADC_cs_n			: out   std_logic;
+	ADC_miso		   : in    std_logic;
+	ADC_mosi  		: out std_logic;
+	
+	--keys		: in    std_logic_vector(7 downto 0);
+	key_rows 		: in  std_logic_vector(4 downto 0); -- 5 INGRESSI (pull-up)
+	key_cols 		: out std_logic_vector(2 downto 0); -- 3 USCITE
+	
+	--Encoder
+	enc_a		: in    std_logic;
+	enc_b		: in    std_logic;
+	
+	s_enc_a        : in  std_logic_vector(6 downto 0);
+   s_enc_b        : in  std_logic_vector(6 downto 0);
+	enc_keys_i     : in  std_logic_vector(3 downto 0)
+	
 	);
 END COMPONENT;
 
@@ -124,8 +161,9 @@ SIGNAL	clk50 :  STD_LOGIC;
 SIGNAL	clk_spi :  STD_LOGIC;
 SIGNAL	nrst :  STD_LOGIC;
 SIGNAL	rxd :  STD_LOGIC;
-
-
+SIGNAL	s_enc_a : std_logic_vector(6 downto 0);
+SIGNAL	s_enc_b : std_logic_vector(6 downto 0);
+SIGNAL	enc_keys_i : std_logic_vector(3 downto 0);
 
 BEGIN 
 
@@ -143,6 +181,9 @@ PORT MAP(nrst => nrst,
 		 enc_a => ENC_A,
 		 enc_b => ENC_B,
 		 key_rows => KEY_ROWS,
+		 key_cols => KEY_COLS,
+		 enc_keys_i => enc_keys_i,
+		 
 		 porta => porta,
 		 portb => portb,
 		 txd => TX,
@@ -159,14 +200,19 @@ PORT MAP(nrst => nrst,
 		 ADC_sclk => ADC_sclk,
 		 ADC_cs_n => ADC_cs_n,
 		 ADC_mosi => ADC_mosi,
+		 
 		 -- JTAG related signals
 		 TMS    => '0',
 		 TCK	  => '0',
 		 TDI     => '0',
 		 TRSTn  => '0',
+		 
 		 INTx   => (others => '0'),
 		 INT0	  => '0',
-		 key_cols => KEY_COLS);
+		 
+		 s_enc_a => s_enc_a,
+		 s_enc_b => s_enc_b
+);
 
 
 b2v_inst1 : pll_master
@@ -199,6 +245,33 @@ b2v_inst4 : triangle_50hz_pwm
         rst_n   => nrst,
         pwm_out  => PWM_B_H
     );
+
+
+
+s_enc_a(0) <= ENC_CH_1_POS_A;
+s_enc_b(0) <= ENC_CH_1_POS_B;
+enc_keys_i(0) <= '1'; -- <= ENC_CH_1_POS_K;
+
+s_enc_a(1) <= ENC_CH_1_GAIN_A;
+s_enc_b(1) <= ENC_CH_1_GAIN_B;
+
+s_enc_a(2) <= ENC_CH_2_POS_A;
+s_enc_b(2) <= ENC_CH_2_POS_B;
+enc_keys_i(1) <= '1'; -- <= ENC_CH_2_POS_K;
+
+s_enc_a(3) <= ENC_CH_2_GAIN_A;
+s_enc_b(3) <= ENC_CH_2_GAIN_B;
+
+s_enc_a(4) <= ENC_TBASE_A;
+s_enc_b(4) <= ENC_TBASE_B;
+
+s_enc_a(5) <= ENC_TRIG_POS_A;
+s_enc_b(5) <= ENC_TRIG_POS_B;
+enc_keys_i(2) <= '1'; -- <= ENC_TRIG_POS_K;
+
+s_enc_a(6) <= ENC_PAN_POS_A;
+s_enc_b(6) <= ENC_PAN_POS_B;
+enc_keys_i(3) <= '1'; -- <= ENC_PAN_POS_K;
 
 
 
