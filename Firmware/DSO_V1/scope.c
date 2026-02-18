@@ -26,6 +26,7 @@ uint16_t old_buffer_b[400];
 
 uint8_t time_div_sel = 10;
 uint8_t prev_time_div_sel = 0xFF; // valore precedente (inesistente all'inizio)
+uint16_t prev_trigger_level = 0xFFFF; // valore precedente (inesistente all'inizio)
 int16_t view_offset = 0;
 int16_t prev_view_offset = 0xFFFF;
 int16_t prev_det_sig = 0;
@@ -1057,34 +1058,7 @@ void update_status_bar(bool force) {
     }
 }
 
-int16_t update_view_offset(
-    int16_t param,
-    int16_t min,
-    int16_t max,
-    int16_t step
-)
-{
-    int16_t det  = encoder_read();
-    int16_t diff = det - prev_det_sig;
-    prev_det_sig = det;
 
-    /* nessun movimento */
-    if (diff == 0)
-        return param;
-
-    /* filtro solo per glitch grossi (wrap / rumore) */
-    if (diff > 20 || diff < -20)
-        return param;
-
-    /* calcolo SEMPRE in 32 bit */
-    int32_t tmp = (int32_t)param + (int32_t)diff * (int32_t)step;
-
-    /* clamp corretto */
-    if (tmp < min) tmp = min;
-    if (tmp > max) tmp = max;
-
-    return (int16_t)tmp;
-}
 
 // Valori di default per gli encoder (minimo, massimo step, valore iniziale)
 #define OFFSET_Y_MIN -50
@@ -1102,6 +1076,12 @@ int16_t update_view_offset(
 #define TDIV_MAX 16
 #define TDIV_STEP 1
 #define TDIV_C_VAL 11
+
+#define TRIG_MIN 0
+#define TRIG_MAX 4095
+#define TRIG_STEP 64
+#define TRIG_C_VAL 2048
+
 
 void write_encoder(uint8_t encoder_idx, int16_t value) {
     switch (encoder_idx) {
@@ -1135,6 +1115,18 @@ void write_encoder(uint8_t encoder_idx, int16_t value) {
             configure_encoder(4, PARAM_STEP, TDIV_STEP);
             configure_encoder(4, PARAM_C_VAL, value);
             break;
+        case 5: // Encoder 5 controlla il livello di trigger
+            configure_encoder(5, PARAM_MIN, TRIG_MIN);
+            configure_encoder(5, PARAM_MAX, TRIG_MAX);
+            configure_encoder(5, PARAM_STEP, TRIG_STEP);
+            configure_encoder(5, PARAM_C_VAL, value);
+            break;
+        case 6: // Encoder 6 controlla il Pan
+            configure_encoder(6, PARAM_MIN, -PAN_LIMIT);
+            configure_encoder(6, PARAM_MAX, PAN_LIMIT);
+            configure_encoder(6, PARAM_STEP, PAN_STEP);
+            configure_encoder(6, PARAM_C_VAL, value);
+            break;
         default:
             
             break;
@@ -1156,8 +1148,11 @@ void conf_encoder() {
     // Encoder 3: Volt/Div CH2
     write_encoder(3, VDIVCH_C_VAL); // Impostiamo il valore iniziale
 
-    // Encoder 4: T/Div (0 a 16, parte da 11, step 1)
+    // Encoder 4: T/Div 
     write_encoder(4, TDIV_C_VAL); // Impostiamo il valore iniziale
+
+    // Encoder 5: Trigger Level
+    write_encoder(5, TRIG_C_VAL); // Impostiamo il valore iniziale
 
 }
 
@@ -1175,6 +1170,7 @@ void scope_main(void)
 {
     uint8_t key, rep;
     uint8_t new_sel;
+    uint16_t new_trigger_level;
     conf_encoder();
     drawStaticInterface();
     update_status_bar(true);
@@ -1251,12 +1247,16 @@ void scope_main(void)
                     updateSidebarLabels(); // Ridisegna etichette 
                     break;
                 case 15: // Tasto encoder per la posizione verticale (Y-POS)
-                    write_encoder(0, OFFSET_Y1_C_VAL); // Reset posizione Y CH1
-                
+                    write_encoder(0, OFFSET_Y1_C_VAL); // Reset posizione Y CH1 
                     break;
                 case 16: // Tasto encoder per la posizione verticale (Y-POS)
                     write_encoder(2, OFFSET_Y2_C_VAL); // Reset posizione Y CH2
-                
+                    break;
+                case 17: // Tasto encoder per il livello di trigger
+                    write_encoder(5, TRIG_C_VAL); // Reset base dei tempi
+                    break;
+                case 18: // Tasto encoder per il PAN
+                    write_encoder(6, 0); // Reset livello di trigger
                     break;
             }
             switch (currentMenu){
@@ -1359,69 +1359,37 @@ void scope_main(void)
         updateSidebarLabels(); 
     }
 
+    new_trigger_level = encoder_values[5];
+    if (new_trigger_level != prev_trigger_level) {
+        // Aggiorna
+        trigger_level_12bit = new_trigger_level;
+        set_trigger_level(trigger_level_12bit);
+        prev_trigger_level = new_trigger_level;
+        
+        // Aggiorna la scritta della tensione in alto
+        updateSidebarLabels(); 
+    }
+
+    int16_t new_pan = encoder_values[6];
+    if (new_pan != prev_view_offset) {
+        
+        // Aggiorna il registro solo se il valore è cambiato
+        osc_write_view_offset(new_pan);
+        osc_arm_readout(); 
+        prev_view_offset = new_pan;
+        view_offset = new_pan; // aggiorna il valore corrente
+        pan_flag = true;
+        /*uart_print("offset ");
+        uart_print_int16(view_offset);
+        uart_print("\r\n");*/
+    }
+
     y_offset_ch[0] = encoder_values[0]; // Aggiorna posizione Y CH1
     y_offset_ch[1] = encoder_values[2]; // Aggiorna posizione Y CH2
 
     ch1_vdiv_idx = encoder_values[1]; // Aggiorna Volt/Div CH1
     ch2_vdiv_idx = encoder_values[3]; // Aggiorna Volt/Div
 
-// Nel loop dell'encoder (tasto 0 attivo)
-if (encoderMode == MODE_Y_POS) {
-    uint8_t idx = (currentMenu == MENU_CH1) ? 0 : 1;
-    
-    // Usiamo la versione signed per gestire lo spostamento
-    // min: -100 (la traccia sparisce sopra), max: 300 (sparisce sotto), step: rot * 2
-    //y_offset_ch[idx] = update_param_16_signed(y_offset_ch[idx], -100, 300, (int16_t)rot * 2);
-    y_offset_ch[idx] = update_param_16_signed(y_offset_ch[idx], -50, 250, 2);
-    // Se vuoi vedere il valore sul tasto mentre lo giri:
-    //updateYPosLabel(currentMenu == MENU_CH1 ? 1 : 2);
-}
-else if (encoderMode == MODE_TRIG_LEVEL) {
-    uint16_t old_trigger_level_12bit = trigger_level_12bit;
-    //update_trigger_by_encoder(rot);
-    trigger_level_12bit = update_param_16(trigger_level_12bit, 0, 4095, 10);
-    if (trigger_level_12bit != old_trigger_level_12bit) {
-        // Cancella precedente
-       // if (last_trig_y != -1) draw_trigger_line(trigger_level_12bit, YELLOW, true);
-        
-        // Aggiorna
-        
-        set_trigger_level(trigger_level_12bit);
-        // Disegna nuova
-        //draw_trigger_line(trigger_level_12bit, YELLOW, false);
-        
-        // Aggiorna la scritta della tensione in alto
-        updateSidebarLabels(); 
-    }
-}
-else if (encoderMode == MODE_TBASE) {
-    new_sel = update_param_8(time_div_sel, 0, 16, 1);
-    if (new_sel != prev_time_div_sel) {
-        // Aggiorna il registro solo se il valore è cambiato
-        REG_BASETIME = new_sel;
-        prev_time_div_sel = new_sel;
-        time_div_sel = new_sel; // aggiorna il valore corrente
-        time_div_sel_changed = true;
-        current_time_base_idx =time_div_sel;
-        updateSidebarLabels(); 
-    }
-
-}
-else if (encoderMode == MODE_PAN) {
-int16_t new_pan = update_view_offset(view_offset , -PAN_LIMIT, +PAN_LIMIT, PAN_STEP);
-            if (new_pan != prev_view_offset) {
-                
-                // Aggiorna il registro solo se il valore è cambiato
-                osc_write_view_offset(new_pan);
-                osc_arm_readout(); 
-                prev_view_offset = new_pan;
-                view_offset = new_pan; // aggiorna il valore corrente
-                pan_flag = true;
-                /*uart_print("offset ");
-                uart_print_int16(view_offset);
-                uart_print("\r\n");*/
-            }
-}
     acquire_and_draw();
     update_status_bar(false);
         

@@ -156,7 +156,6 @@ set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/SynchronizerCompPack.v
 set_global_assignment -name VERILOG_FILE AVR_Core/Peripheral/spi_mod.v
 set_global_assignment -name VERILOG_FILE AVR_Core/Peripheral/rsnc_bit.v
 set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/portx.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/mmio_encoder.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/keypad_5x3.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/MemAccessCtrlPack.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/MemAccessCompPack.vhd

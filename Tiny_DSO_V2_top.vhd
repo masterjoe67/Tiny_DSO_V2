@@ -101,9 +101,6 @@ COMPONENT top_avr_core_v8 PORT(
 	key_cols 		: out std_logic_vector(2 downto 0); -- 3 USCITE
 	
 	--Encoder
-	enc_a		: in    std_logic;
-	enc_b		: in    std_logic;
-	
 	s_enc_a        : in  std_logic_vector(6 downto 0);
    s_enc_b        : in  std_logic_vector(6 downto 0);
 	enc_keys_i     : in  std_logic_vector(3 downto 0)
@@ -176,10 +173,6 @@ PORT MAP(nrst => nrst,
 		 ck50 => clk50,
 		 clk_spi => clk_spi,
 		 rxd => rxd,
-
-		 
-		 enc_a => ENC_A,
-		 enc_b => ENC_B,
 		 key_rows => KEY_ROWS,
 		 key_cols => KEY_COLS,
 		 enc_keys_i => enc_keys_i,
@@ -271,7 +264,7 @@ enc_keys_i(2) <= '1'; -- <= ENC_TRIG_POS_K;
 
 s_enc_a(6) <= ENC_PAN_POS_A;
 s_enc_b(6) <= ENC_PAN_POS_B;
-enc_keys_i(3) <= '1'; -- <= ENC_PAN_POS_K;
+enc_keys_i(3) <= ENC_PAN_POS_K;
 
 
 

@@ -26,7 +26,7 @@ entity top_avr_core_v8 is port(
 	-- Port 
 	porta  : inout std_logic_vector(7 downto 0);
 	portb  : inout std_logic_vector(7 downto 0);
-	--portc  : inout std_logic_vector(7 downto 0);
+
 	-- UART 
 	rxd    : in    std_logic;
 	txd    : out   std_logic;
@@ -58,9 +58,6 @@ entity top_avr_core_v8 is port(
 	key_cols 		: out std_logic_vector(2 downto 0); -- 3 USCITE
 	
 	--Encoder
-	enc_a		: in    std_logic;
-	enc_b		: in    std_logic;
-	
 	s_enc_a        : in  std_logic_vector(6 downto 0);
    s_enc_b        : in  std_logic_vector(6 downto 0);
 	enc_keys_i     : in  std_logic_vector(3 downto 0) -- 4 TASTI DEGLI ENCODER
@@ -479,25 +476,25 @@ Debouncer: entity work.keypad_5x3
 io_port_out(8) <= debounch_reg_dbusout;
 io_port_out_en(8) <= debounch_reg_out_en;
 
-encoder:entity work.mmio_encoder port map(
-    clk      	 => core_cp2,
-    reset_n     => core_ireset,
-    set_origin => '0',
-    -- encoder signals
-    enc_a     => enc_a,
-    enc_b     => enc_b,
-
-    -- bus interface
-    bus_addr  => core_adr,
-    bus_wdata => core_dbusout,
-    bus_rdata => encoder_reg_dbusout,
-    bus_rd    => core_iore,
-    bus_wr    => core_iowe,
-
-    out_en    => encoder_reg_out_en
-	);
-	io_port_out(9) <= encoder_reg_dbusout;
-	io_port_out_en(9) <= encoder_reg_out_en;
+--encoder:entity work.mmio_encoder port map(
+--    clk      	 => core_cp2,
+--    reset_n     => core_ireset,
+--    set_origin => '0',
+--    -- encoder signals
+--    enc_a     => enc_a,
+--    enc_b     => enc_b,
+--
+--    -- bus interface
+--    bus_addr  => core_adr,
+--    bus_wdata => core_dbusout,
+--    bus_rdata => encoder_reg_dbusout,
+--    bus_rd    => core_iore,
+--    bus_wr    => core_iowe,
+--
+--    out_en    => encoder_reg_out_en
+--	);
+--	io_port_out(9) <= encoder_reg_dbusout;
+--	io_port_out_en(9) <= encoder_reg_out_en;
 	
 smart_encoder:entity work.SmartEncoderBank
     port map(
@@ -528,8 +525,8 @@ core_irqlines(22 downto 20) <= ( others => '0');
 -- ************************
 
 -- Unused out_en
-io_port_out_en(10 to 15) <= (others => '0');
-io_port_out(10 to 15) <= (others => (others => '0'));
+io_port_out_en(9 to 15) <= (others => '0');
+io_port_out(9 to 15) <= (others => (others => '0'));
 
 
 

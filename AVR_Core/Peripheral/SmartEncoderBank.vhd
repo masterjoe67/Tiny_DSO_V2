@@ -39,7 +39,7 @@ architecture Behavioral of SmartEncoderBank is
     
     -- Segnali per Debounce
     signal last_a         : std_logic_vector(6 downto 0) := (others => '0');
-    signal sampler_timer : unsigned(18 downto 0) := (others => '0'); 
+    signal sampler_timer : unsigned(17 downto 0) := (others => '0'); 
     signal pipe_a, pipe_b : std_logic_vector(6 downto 0) := (others => '0');
     signal deb_a, deb_b   : std_logic_vector(6 downto 0) := (others => '0');
 
