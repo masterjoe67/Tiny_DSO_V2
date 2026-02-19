@@ -409,7 +409,8 @@ component st7796_fast_ctrl is
         tft_mosi    : out std_logic;
         tft_cs      : out std_logic;
         tft_dc      : out std_logic;
-        tft_rst     : out std_logic
+        tft_rst     : out std_logic;
+		  tft_backlight : out std_logic
     );
 end component;
 

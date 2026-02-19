@@ -904,4 +904,7 @@ void tft_print_float(float value, uint8_t decimals) {
     }
 }
 
+void tft_set_backlight(uint8_t level) {
+    TFT_PWM_REG = level;
+}
 

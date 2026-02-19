@@ -30,12 +30,15 @@ entity top_avr_core_v8 is port(
 	-- UART 
 	rxd    : in    std_logic;
 	txd    : out   std_logic;
+	
 	-- TFT SPI
-	tft_sclk    : out std_logic;
-	tft_mosi    : out std_logic;
-	tft_cs      : out std_logic;
-	tft_dc      : out std_logic;
-	tft_rst     : out std_logic;
+	tft_sclk    	: out std_logic;
+	tft_mosi    	: out std_logic;
+	tft_cs      	: out std_logic;
+	tft_dc      	: out std_logic;
+	tft_rst     	: out std_logic;
+	tft_backlight 	: out std_logic;
+	
 	-- External interrupts
 	INTx   : in    std_logic_vector(7 downto 0); 
 	INT0	 : in    std_logic;
@@ -218,12 +221,6 @@ signal ram_cp2_n        : std_logic;
 
 signal sleep_mode       : std_logic; 
 
-
--- Inverted write enable signals
---signal n_pm_h_we        : std_logic;
---signal n_pm_l_we        : std_logic;
---signal n_core_ramwe     : std_logic;
-
 -- "EEPROM" related signals
 signal EEPrgSel : std_logic; 
 signal EEAdr    : std_logic_vector(11 downto 0);
@@ -299,22 +296,23 @@ core_inst <= pm_dout;
 
 TFT_SPI : component st7796_fast_ctrl 
     port map(
-        clk        => core_cp2,
-		  clk_spi    => clk_spi,
-        rst_n      => core_ireset,
+        clk        		=> core_cp2,
+		  clk_spi    		=> clk_spi,
+        rst_n      		=> core_ireset,
         -- Interfaccia Bus AVR
-        adr        => core_adr,
-        dbus_in    => core_dbusout,
-        dbus_out   => spi_dbusout,
-        iore       => core_iore,
-        iowe       => core_iowe,
-		  out_en     => spi_out_en,
+        adr        		=> core_adr,
+        dbus_in    		=> core_dbusout,
+        dbus_out   		=> spi_dbusout,
+        iore       		=> core_iore,
+        iowe       		=> core_iowe,
+		  out_en     		=> spi_out_en,
         -- Pin Fisici Display
-        tft_sclk   => tft_sclk,
-        tft_mosi   => tft_mosi,
-        tft_cs     => tft_cs,
-        tft_dc     => tft_dc,
-        tft_rst    => tft_rst
+        tft_sclk   		=> tft_sclk,
+        tft_mosi   		=> tft_mosi,
+        tft_cs     		=> tft_cs,
+        tft_dc     		=> tft_dc,
+        tft_rst    		=> tft_rst,
+		  tft_backlight 	=> tft_backlight
     );
 
 io_port_out(5) <= spi_dbusout;

@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<WORKSPACE>
+ <FRAME activeWindow="2">
+  <PLACEMENT>01d9d0cb00030000fffffffffffffff8000007800000043800000000000000170000077f000004370000000002000000078000000000000000170000077f00000437</PLACEMENT>
+  <WINDOW module="ISIS" type="default" index="0" mode="00050a01"/>
+  <WINDOW module="ARES" type="default" index="0" mode="00060a00"/>
+  <WINDOW module="VIEW3D" type="VIEW3D" index="0" mode="00060a00">
+   <camera>
+    <position y="-3018142" z="24580686" x="1739415"/>
+    <focus y="632570" z="403073" x="230882"/>
+    <up y="975251" z="156973" x="-155694"/>
+   </camera>
+  </WINDOW>
+ </FRAME>
+ <MODULE name="ARES">
+  <editor snap="100000" scale="78" gridmode="2" gridmajor="10000000" zoom="-1" orgmode="1" metric="1" snapidx="2" snaprange="162820" xcursor="32" flipped="0" gridminor="400000">
+   <centre y="-1326078" x="2100000"/>
+   <origin y="4500000" x="-7500000"/>
+   <world x2="15240000" x1="-15240000" y1="-12700000" y2="12700000"/>
+  </editor>
+ </MODULE>
+ <MODULE name="ISIS">
+  <editor snap="127000" scale="92" gridmode="2" gridmajor="2540000" zoom="0" orgmode="0" metric="0" snapidx="1" snaprange="138043" xcursor="32" flipped="0" gridminor="254000">
+   <centre y="0" x="0"/>
+   <origin y="0" x="0"/>
+   <world x2="19050000" x1="-19050000" y1="-12700000" y2="12700000"/>
+  </editor>
+ </MODULE>
+ <MODULE name="VSMDEBUG">
+  <PWI/>
+ </MODULE>
+</WORKSPACE>

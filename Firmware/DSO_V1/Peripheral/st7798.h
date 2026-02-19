@@ -8,9 +8,10 @@
 #define LOAD_GLCD
 
 //Definiamo i registri basandoci sulla tua mappatura
-#define TFT_DATA   _SFR_IO8(0x0D)  //(*(volatile uint8_t *)(0x0D + 0x20)) // SPDR (Offset I/O + 0x20)
-#define TFT_STATUS _SFR_IO8(0x0E)  //(*volatile uint8_t *)(0x0E + 0x20)) // SPSR
-#define TFT_CTRL   _SFR_IO8(0x0F)  //(*(volatile uint8_t *)(0x0F + 0x20)) // SPCR
+#define TFT_DATA    _SFR_IO8(0x0D)  //(*(volatile uint8_t *)(0x0D + 0x20)) // SPDR (Offset I/O + 0x20)
+#define TFT_STATUS  _SFR_IO8(0x0E)  //(*volatile uint8_t *)(0x0E + 0x20)) // SPSR
+#define TFT_CTRL    _SFR_IO8(0x0F)  //(*(volatile uint8_t *)(0x0F + 0x20)) // SPCR
+#define TFT_PWM_REG _SFR_IO8(0x07) // Registro per il controllo della retroilluminazione (PWM)
 
 // Bit del registro di controllo (SPCR)
 #define TFT_DC_BIT   0
@@ -113,4 +114,7 @@ void tft_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t bg);
 void tft_print_int(int32_t num);
 void tft_print_float(float value, uint8_t decimals);
+void tft_set_backlight(uint8_t level);
+
+
 #endif

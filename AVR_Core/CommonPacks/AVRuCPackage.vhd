@@ -108,7 +108,8 @@ constant XDIV_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16
 constant LCD_DATA_REG  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0D#); -- Ex SPDR
 constant LCD_STATUS_REG: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0E#); -- Ex SPSR
 constant LCD_CTRL_REG  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#0F#); -- Ex SPCR
--- End of SPI
+constant LCD_PWM_REG   : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#07#); -- Ex SPCR
+
 
 -- PORTA addresses 
 constant PORTA_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#1B#);
@@ -120,13 +121,9 @@ constant PORTB_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16
 constant DDRB_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#17#);
 constant PINB_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#16#);
 
--- PORTC addresses 
-constant PORTC_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#15#);
-constant DDRC_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#14#);
-constant PINC_Address  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#13#);
 
 -- Free
-constant MODE       : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#07#);
+
 
 -- Keyboard
 constant KEY_STATUS  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#10#);
@@ -155,7 +152,7 @@ constant REG_FREQ1  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#01
 constant REG_FREQ2  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#02#);
 constant REG_FREQ3  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#03#);
 -- ******************** Parallel port address table **************************************
-constant CMaxNumOfPPort : positive := 3;
+constant CMaxNumOfPPort : positive := 2;
 
 type PPortAdrTbl_Type is record Port_Adr : std_logic_vector(IOAdrWidth-1 downto 0);
 	                            DDR_Adr  : std_logic_vector(IOAdrWidth-1 downto 0);
@@ -165,8 +162,8 @@ end record;
 type PPortAdrTblArray_Type is array (0 to CMaxNumOfPPort-1) of PPortAdrTbl_Type;
 
 constant PPortAdrArray : PPortAdrTblArray_Type := ((PORTA_Address,DDRA_Address,PINA_Address),  -- PORTA
-                                                   (PORTB_Address,DDRB_Address,PINB_Address),  -- PORTB
-																	(PORTC_Address,DDRC_Address,PINC_Address)); -- PORTC
+                                                   (PORTB_Address,DDRB_Address,PINB_Address)  -- PORTB
+																	); 
 
 -- ***************************************************************************************
 

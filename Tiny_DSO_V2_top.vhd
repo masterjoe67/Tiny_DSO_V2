@@ -21,11 +21,12 @@ ENTITY Tiny_DSO_V2_top IS
 		portb :  INOUT  STD_LOGIC_VECTOR(7 DOWNTO 0);
 		TX :  OUT  STD_LOGIC;
 			-- TFT SPI
-		tft_sclk    : out std_logic;
-		tft_mosi    : out std_logic;
-		tft_cs      : out std_logic;
-		tft_dc      : out std_logic;
-		tft_rst     : out std_logic;
+		tft_sclk    	: out std_logic;
+		tft_mosi    	: out std_logic;
+		tft_cs      	: out std_logic;
+		tft_dc      	: out std_logic;
+		tft_rst     	: out std_logic;
+		tft_backlight	: out std_logic;
 		
 			-- SMART ENCODER
 		ENC_TBASE_A 	 :  IN  STD_LOGIC;
@@ -79,6 +80,7 @@ COMPONENT top_avr_core_v8 PORT(
 	tft_cs      : out std_logic;
 	tft_dc      : out std_logic;
 	tft_rst     : out std_logic;
+	tft_backlight : out std_logic;
 	-- External interrupts
 	INTx   : in    std_logic_vector(7 downto 0); 
 	INT0	 : in    std_logic;
@@ -187,7 +189,7 @@ PORT MAP(nrst => nrst,
 		 tft_cs      => tft_cs,
 		 tft_dc      => tft_dc,
 		 tft_rst     => tft_rst,
-
+		 tft_backlight => tft_backlight,
 		 
 		 ADC_miso => ADC_miso,
 		 ADC_sclk => ADC_sclk,

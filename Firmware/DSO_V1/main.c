@@ -23,6 +23,7 @@ int main(void) {
     leds_init();
  
     tft_init();
+    tft_set_backlight(128);
     tft_setRotation(LANDSCAPE);
     tft_fillScreen(BLACK);
 
