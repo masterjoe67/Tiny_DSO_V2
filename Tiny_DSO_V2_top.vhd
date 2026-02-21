@@ -245,14 +245,14 @@ b2v_inst4 : triangle_50hz_pwm
 
 s_enc_a(0) <= ENC_CH_1_POS_A;
 s_enc_b(0) <= ENC_CH_1_POS_B;
-enc_keys_i(0) <= '1'; -- <= ENC_CH_1_POS_K;
+enc_keys_i(0) <= ENC_CH_1_POS_K;
 
 s_enc_a(1) <= ENC_CH_1_GAIN_A;
 s_enc_b(1) <= ENC_CH_1_GAIN_B;
 
 s_enc_a(2) <= ENC_CH_2_POS_A;
 s_enc_b(2) <= ENC_CH_2_POS_B;
-enc_keys_i(1) <= '1'; -- <= ENC_CH_2_POS_K;
+enc_keys_i(1) <= ENC_CH_2_POS_K;
 
 s_enc_a(3) <= ENC_CH_2_GAIN_A;
 s_enc_b(3) <= ENC_CH_2_GAIN_B;
@@ -262,7 +262,7 @@ s_enc_b(4) <= ENC_TBASE_B;
 
 s_enc_a(5) <= ENC_TRIG_POS_A;
 s_enc_b(5) <= ENC_TRIG_POS_B;
-enc_keys_i(2) <= '1'; -- <= ENC_TRIG_POS_K;
+enc_keys_i(2) <= ENC_TRIG_POS_K;
 
 s_enc_a(6) <= ENC_PAN_POS_A;
 s_enc_b(6) <= ENC_PAN_POS_B;

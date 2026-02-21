@@ -1191,9 +1191,15 @@ void scope_main(void)
         
         
         if(ev != 0xFF){
-            uart_print("Event: ");
+           /* uart_print("Event: ");
             uart_print_hex(ev);
             uart_print("\r\n");
+            tft_fillRect(100, 100, 100, 16, BLACK);
+        setTextColor(YELLOW, BLACK);
+        tft_set_cursor(100, 100);
+        tft_Print("CH2: ");
+            tft_print_float(ev, 2);*/
+
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---

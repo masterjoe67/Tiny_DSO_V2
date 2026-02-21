@@ -24,7 +24,7 @@ int main(void) {
  
     tft_init();
     tft_set_backlight(128);
-    tft_setRotation(LANDSCAPE);
+    tft_setRotation(3);
     tft_fillScreen(BLACK);
 
     setTextFont(2);

@@ -318,7 +318,7 @@ void tft_setRotation(uint8_t m) {
             _height = 480;
             break;
         case 3: // Orizzontale Invertito
-            madctl = 0x40 | 0x20 | 0x08; // MX | MV | BGR
+            madctl = 0x20 | 0x08 | 0x80 | 0x40; // MX | MV | BGR
             _width  = 480;
             _height = 320;
             break;
