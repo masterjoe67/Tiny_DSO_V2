@@ -3,7 +3,7 @@
 Sistema integrato basato su **AVR Core** implementato in FPGA, ottimizzato per il controllo di un display **ST7796** tramite controller SPI ad alta velocità.
 
 <p align="center">
-  <img src="assets/screenshot.jpg" alt="Tiny DSO Preview" width="600">
+  <img src="assets/screenshot.JPG" alt="Tiny DSO Preview" width="600">
 </p>
 
 ## 🛠️ Caratteristiche Hardware (VHDL)
