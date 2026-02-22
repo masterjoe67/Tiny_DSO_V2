@@ -13,6 +13,7 @@ use work.AVRuCPackage.all;
 entity oscilloscope_top is
     port(
         clk           : in  std_logic;
+		  clk_adc   	 : in    std_logic;
         rst_n         : in  std_logic;
 
         -- SPI ADC
@@ -279,67 +280,6 @@ end process;
 	 
 	 tb_view_full_sign <= std_logic_vector(view_full_sign);
 	 
-
-
---process(clk, rst_n)
---    variable gate_count : unsigned(7 downto 0) := (others => '0'); 
---    variable accumulator : unsigned(31 downto 0) := (others => '0');
---begin
---    if rst_n = '0' then
---        gate_count := (others => '0');
---        accumulator := (others => '0');
---        freq_period_reg <= (others => '0');
---    elsif rising_edge(clk) then
---        -- Incrementa l'accumulatore (ora ogni step è 16.66ns @60MHz)
---        if accumulator /= x"FFFFFFFF" then
---            accumulator := accumulator + 1;
---        end if;
---
---        if trig_hit_raw = '1' then
---            -- Calcolo della frequenza: Freq = (64 * 60,000,000) / freq_period_reg
---            if gate_count >= 63 then 
---                freq_period_reg <= accumulator; -- LATCH!
---                accumulator := (others => '0');
---                gate_count := (others => '0');
---            else
---                gate_count := gate_count + 1;
---            end if;
---        end if;
---        
---        -- Protezione: Timeout ridotto a ~71.5 secondi @60MHz
---        if accumulator = x"FFFFFFFF" then
---            gate_count := (others => '0');
---            freq_period_reg <= (others => '0');
---        end if;
---    end if;
---end process;
---	
---	process(clk, rst_n)
---		 constant HYST : unsigned(11 downto 0) := to_unsigned(20, 12);
---		 variable v_trig_armed : std_logic := '0'; -- Usiamo una variabile o un segnale dedicato
---	begin
---		 if rst_n = '0' then
---			  trig_hit_raw <= '0';
---			  v_trig_armed := '0';
---		 elsif rising_edge(clk) then
---			  trig_hit_raw <= '0'; -- Impulso di default
---			  
---			  -- Logica di trigger SEMPRE ATTIVA (indipendente da state = ARMED)
---			  if trig_enable = '1' then
---					if trig_edge = '0' then -- Rising Edge
---						 if unsigned(trig_sample_sync) < (unsigned(trig_level) - HYST) then
---							  v_trig_armed := '1';
---						 elsif v_trig_armed = '1' and (prev_sample < trig_level) 
---														  and (trig_sample_sync >= trig_level) then
---							  trig_hit_raw <= '1'; -- Questo va al frequenzimetro
---							  v_trig_armed := '0';
---						 end if;
---					else -- Falling Edge logic...
---						 -- (stessa cosa per il falling edge)
---					end if;
---			  end if;
---		 end if;
---	end process;
 
 -- 1. PROCESSO CALCOLO FREQUENZA (Ottimizzato per 60MHz)
 process(clk, rst_n)
@@ -672,17 +612,7 @@ begin
             end if;
         end if;
 
-        -- Logica Trigger (Invariata)
---        if mmio_we = '1' and trig_reg_sel = '1' then
---            if trig_bytecnt = "00" then trig_shift(7 downto 0) <= unsigned(mmio_wdata);
---            elsif trig_bytecnt = "01" then trig_shift(15 downto 8) <= unsigned(mmio_wdata);
---            elsif trig_bytecnt = "10" then
---                trig_shift(23 downto 16) <= unsigned(mmio_wdata);
---                reg_trig_level <= trig_shift(11 downto 0);
---            end if;
---            if trig_bytecnt = "10" then trig_bytecnt <= (others => '0');
---            else trig_bytecnt <= trig_bytecnt + 1; end if;
---        end if;
+
 if mmio_we = '1' and trig_reg_sel = '1' then
     if trig_bytecnt = "00" then 
         trig_shift(7 downto 0) <= unsigned(mmio_wdata);
@@ -913,7 +843,7 @@ end process;
             clk   => clk,   rst_n => rst_n,
             miso  => miso,  mosi  => mosi,
             sclk  => sclk,  cs_n  => cs_n,
-            ch0   => adc_a, ch1   => adc_b, ch2   => adc_c
+            ch0   => adc_a, ch1   => adc_b 
         );
 
 end architecture;

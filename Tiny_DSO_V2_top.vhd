@@ -52,7 +52,7 @@ ENTITY Tiny_DSO_V2_top IS
 		ADC_sclk :  OUT  STD_LOGIC;
 		ADC_cs_n :  OUT  STD_LOGIC;
 		ADC_mosi :  OUT  STD_LOGIC;
-		out100Hz :  OUT  STD_LOGIC;
+
 		KEY_COLS :  OUT  STD_LOGIC_VECTOR(2 DOWNTO 0);
 		PWM_A_H  :  OUT  STD_LOGIC;
 		PWM_B_H  :  OUT  STD_LOGIC
@@ -65,7 +65,7 @@ ARCHITECTURE rtl OF Tiny_DSO_V2_top IS
 COMPONENT top_avr_core_v8 PORT(
 	nrst   : in    std_logic;
 	clk    : in    std_logic;
-	ck50   : in    std_logic;
+	clk_adc   : in    std_logic;
 	clk_spi : IN STD_LOGIC;
 	-- Port 
 	porta  : inout std_logic_vector(7 downto 0);
@@ -110,13 +110,6 @@ COMPONENT top_avr_core_v8 PORT(
 	);
 END COMPONENT;
 
-COMPONENT clk_divider_100Hz 
-    port (
-        clk_in    : in  std_logic;  -- Ingresso 50 MHz
-        reset_n   : in  std_logic;  -- Reset asincrono NEGATO (Attivo basso)
-        clk_out   : out std_logic   -- Uscita 100 Hz (onda quadra 50%)
-    );
-end COMPONENT;
 
 COMPONENT sine_50hz_hex 
     generic (
@@ -148,15 +141,9 @@ COMPONENT pll_master
 	);
 END COMPONENT;
 
-COMPONENT count100hz
-	PORT(clock : IN STD_LOGIC;
-		 cout : OUT STD_LOGIC;
-		 q : OUT STD_LOGIC_VECTOR(18 DOWNTO 0)
-	);
-END COMPONENT;
 
 SIGNAL	clk0 :  STD_LOGIC;
-SIGNAL	clk50 :  STD_LOGIC;
+SIGNAL	clk_adc :  STD_LOGIC;
 SIGNAL	clk_spi :  STD_LOGIC;
 SIGNAL	nrst :  STD_LOGIC;
 SIGNAL	rxd :  STD_LOGIC;
@@ -172,7 +159,7 @@ BEGIN
 b2v_inst : top_avr_core_v8
 PORT MAP(nrst => nrst,
 		 clk => clk0,
-		 ck50 => clk50,
+		 clk_adc => clk_adc,
 		 clk_spi => clk_spi,
 		 rxd => rxd,
 		 key_rows => KEY_ROWS,
@@ -213,33 +200,29 @@ PORT MAP(nrst => nrst,
 b2v_inst1 : pll_master
 PORT MAP(inclk0 => CLOCK_50,
 		 c0 => clk0,
-		 c1 => clk50,
+		 c1 => clk_adc,
 		 c2 => clk_spi);
 
-
-b2v_inst2 : count100hz
-PORT MAP(clock => clk50,
-		 cout => out100Hz);
 		 
-b2v_inst3 : sine_50hz_hex 
-    generic map(
-        CLK_FREQ => 50000000
-    )
-    port map(
-        clk     => clk50,
-        rst_n   => nrst,
-        pwm_out  => PWM_A_H
-    );
-	 
-b2v_inst4 : triangle_50hz_pwm 
-    generic map(
-        CLK_FREQ => 50000000
-    )
-    port map(
-        clk     => clk50,
-        rst_n   => nrst,
-        pwm_out  => PWM_B_H
-    );
+--b2v_inst3 : sine_50hz_hex 
+--    generic map(
+--        CLK_FREQ => 50000000
+--    )
+--    port map(
+--        clk     => clk0,
+--        rst_n   => nrst,
+--        pwm_out  => PWM_A_H
+--    );
+--	 
+--b2v_inst4 : triangle_50hz_pwm 
+--    generic map(
+--        CLK_FREQ => 50000000
+--    )
+--    port map(
+--        clk     => clk0,
+--        rst_n   => nrst,
+--        pwm_out  => PWM_B_H
+--    );
 
 
 

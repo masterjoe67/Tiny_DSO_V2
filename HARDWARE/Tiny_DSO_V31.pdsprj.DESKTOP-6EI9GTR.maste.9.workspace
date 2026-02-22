@@ -1,28 +1,28 @@
 <?xml version='1.0' encoding='UTF-8' standalone='yes'?>
 <WORKSPACE>
  <FRAME activeWindow="1">
-  <PLACEMENT>01d9d0cb00030000fffffffffffffff80000077e0000042f000003c20000002d0000076f0000042a0000000002000000078000000000000000170000077d0000042e</PLACEMENT>
-  <WINDOW module="ISIS" index="0" mode="00050a00" type="default"/>
-  <WINDOW module="ARES" index="0" mode="00060a00" type="default"/>
+  <PLACEMENT>01d9d0cb00030000fffffffffffffff80000078000000438000000100000002d0000049e0000042a0000000002000000078000000000000000170000077f00000437</PLACEMENT>
+  <WINDOW index="0" type="default" mode="00050a10" module="ISIS"/>
+  <WINDOW index="0" type="default" mode="00060a00" module="ARES"/>
  </FRAME>
- <MODULE name="ARES">
-  <editor gridmode="2" snaprange="76047" flipped="0" snap="63500" scale="167" xcursor="32" gridminor="127000" zoom="-1" snapidx="2" metric="0" gridmajor="2540000" orgmode="0">
-   <centre x="-4211944" y="0"/>
-   <origin x="0" y="0"/>
-   <world x1="-15240000" y2="12700000" y1="-12700000" x2="15240000"/>
-  </editor>
+ <MODULE name="VSMEDIT">
+  <EDITOR/>
  </MODULE>
- <MODULE name="ISIS">
-  <editor gridmode="2" snaprange="139560" flipped="0" snap="127000" scale="91" xcursor="32" gridminor="254000" zoom="0" snapidx="1" metric="0" gridmajor="2540000" orgmode="0">
-   <centre x="0" y="0"/>
-   <origin x="0" y="0"/>
-   <world x1="-19050000" y2="12700000" y1="-12700000" x2="19050000"/>
+ <MODULE name="ARES">
+  <editor metric="1" snaprange="184057" scale="69" orgmode="0" gridmode="2" xcursor="32" snapidx="3" flipped="0" gridmajor="10000000" zoom="-1" gridminor="500000" snap="250000">
+   <centre y="4750000" x="2500000"/>
+   <origin y="0" x="0"/>
+   <world y1="-12700000" y2="12700000" x1="-15240000" x2="15240000"/>
   </editor>
  </MODULE>
  <MODULE name="VSMDEBUG">
   <PWI/>
  </MODULE>
- <MODULE name="VSMEDIT">
-  <EDITOR/>
+ <MODULE name="ISIS">
+  <editor metric="0" snaprange="71751" scale="177" orgmode="0" gridmode="2" xcursor="32" snapidx="1" flipped="0" gridmajor="2540000" zoom="0" gridminor="127000" snap="127000">
+   <centre y="2286000" x="3175000"/>
+   <origin y="0" x="0"/>
+   <world y1="-12700000" y2="12700000" x1="-19050000" x2="19050000"/>
+  </editor>
  </MODULE>
 </WORKSPACE>

@@ -21,7 +21,7 @@ use WORK.MemAccessCompPack.all;
 entity top_avr_core_v8 is port(
 	nrst   : in    std_logic;
 	clk    : in    std_logic;
-	ck50   : in    std_logic;
+	clk_adc   : in    std_logic;
 	clk_spi : IN STD_LOGIC;
 	-- Port 
 	porta  : inout std_logic_vector(7 downto 0);
@@ -474,25 +474,6 @@ Debouncer: entity work.keypad_5x3
 io_port_out(8) <= debounch_reg_dbusout;
 io_port_out_en(8) <= debounch_reg_out_en;
 
---encoder:entity work.mmio_encoder port map(
---    clk      	 => core_cp2,
---    reset_n     => core_ireset,
---    set_origin => '0',
---    -- encoder signals
---    enc_a     => enc_a,
---    enc_b     => enc_b,
---
---    -- bus interface
---    bus_addr  => core_adr,
---    bus_wdata => core_dbusout,
---    bus_rdata => encoder_reg_dbusout,
---    bus_rd    => core_iore,
---    bus_wr    => core_iowe,
---
---    out_en    => encoder_reg_out_en
---	);
---	io_port_out(9) <= encoder_reg_dbusout;
---	io_port_out_en(9) <= encoder_reg_out_en;
 	
 smart_encoder:entity work.SmartEncoderBank
     port map(
@@ -806,6 +787,7 @@ RAMAdrDcd_Inst:component RAMAdrDcd port map(
 scope_inst : entity work.oscilloscope_top 
     port map(
         clk     => core_cp2,
+		  clk_adc => clk_adc,
         rst_n   => core_ireset,
 
         -- ADC

@@ -58,18 +58,10 @@ set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_
 set_location_assignment PIN_R8 -to CLOCK_50
 set_location_assignment PIN_J15 -to KEY[0]
 set_location_assignment PIN_B1 -to LED[6]
-set_location_assignment PIN_F2 -to I2C_SCLK
-set_location_assignment PIN_F1 -to I2C_SDAT
-set_location_assignment PIN_B4 -to RX
-set_location_assignment PIN_B5 -to TX
+set_location_assignment PIN_T10 -to RX
+set_location_assignment PIN_R11 -to TX
 set_location_assignment PIN_A6 -to PWM_A_H
-set_location_assignment PIN_D6 -to PWM_A_L
 set_location_assignment PIN_C6 -to PWM_B_H
-set_location_assignment PIN_E6 -to PWM_B_L
-set_location_assignment PIN_D8 -to PWM_C_H
-set_location_assignment PIN_T10 -to porta[0]
-set_location_assignment PIN_R11 -to portb[0]
-set_location_assignment PIN_A5 -to button
 set_location_assignment PIN_A15 -to LED[0]
 set_location_assignment PIN_L3 -to LED[7]
 set_location_assignment PIN_A11 -to LED[3]
@@ -77,8 +69,6 @@ set_location_assignment PIN_B13 -to LED[2]
 set_location_assignment PIN_A13 -to LED[1]
 set_location_assignment PIN_D1 -to LED[4]
 set_location_assignment PIN_F3 -to LED[5]
-set_location_assignment PIN_A12 -to ENC_A
-set_location_assignment PIN_D12 -to ENC_B
 set_location_assignment PIN_B10 -to ADC_mosi
 set_location_assignment PIN_B14 -to ADC_sclk
 set_location_assignment PIN_A10 -to ADC_cs_n
@@ -175,19 +165,19 @@ set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/st7796_fast_ctrl.vhd
 set_global_assignment -name SIGNALTAP_FILE stp2.stp
 set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
 set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/SmartEncoderBank.vhd
-set_location_assignment PIN_P15 -to ENC_TBASE_B
-set_location_assignment PIN_P16 -to ENC_TBASE_A
+set_location_assignment PIN_N11 -to ENC_TBASE_B
+set_location_assignment PIN_P9 -to ENC_TBASE_A
 set_global_assignment -name SIGNALTAP_FILE stp1.stp
-set_location_assignment PIN_J16 -to ENC_CH_1_POS_B
+set_location_assignment PIN_J13 -to ENC_CH_1_POS_B
 set_location_assignment PIN_M10 -to ENC_CH_1_POS_K
-set_location_assignment PIN_J13 -to ENC_CH_1_POS_A
+set_location_assignment PIN_J16 -to ENC_CH_1_POS_A
 set_location_assignment PIN_N9 -to ENC_CH_1_GAIN_B
 set_location_assignment PIN_L16 -to ENC_CH_1_GAIN_A
 set_location_assignment PIN_N15 -to ENC_CH_2_POS_B
 set_location_assignment PIN_R14 -to ENC_CH_2_POS_K
 set_location_assignment PIN_L14 -to ENC_CH_2_POS_A
-set_location_assignment PIN_P9 -to ENC_CH_2_GAIN_B
-set_location_assignment PIN_N11 -to ENC_CH_2_GAIN_A
+set_location_assignment PIN_P15 -to ENC_CH_2_GAIN_B
+set_location_assignment PIN_P16 -to ENC_CH_2_GAIN_A
 set_location_assignment PIN_R10 -to ENC_TRIG_POS_B
 set_location_assignment PIN_P11 -to ENC_TRIG_POS_K
 set_location_assignment PIN_N12 -to ENC_TRIG_POS_A
@@ -204,4 +194,7 @@ set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ENC_CH_2_POS_K
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ENC_PAN_POS_K
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ENC_TRIG_POS_K
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ENC_CH_1_POS_K
+set_global_assignment -name TIMING_ANALYZER_MULTICORNER_ANALYSIS ON
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 4
+set_global_assignment -name VHDL_FILE AVR_Core/SCOPE/dual_ad9226_reader.vhd
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

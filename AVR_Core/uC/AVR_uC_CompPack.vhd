@@ -375,6 +375,7 @@ end component;
 component oscilloscope_top is
     port(
         clk     : in  std_logic;
+		  clk_adc : in    std_logic;
         rst_n   : in  std_logic;
 
         -- ADC
