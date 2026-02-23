@@ -29,29 +29,6 @@ component pport is generic(PPortNum : natural);
 			   pinx       : in  std_logic_vector(7 downto 0));
 end component;
 
-
-component mmio_encoder is
-  port (
-    clk          : in  std_logic;
-    reset        : in  std_logic;
-	 set_origin	  : IN     STD_LOGIC;
-    direction    : OUT    STD_LOGIC;                            --direction of last change, 1 = positive, 0 = negative
-
-    -- encoder signals
-    enc_a     : in  std_logic;
-    enc_b     : in  std_logic;
-
-    -- bus interface
-    bus_addr  : in  std_logic_vector(6 downto 0);
-    bus_wdata : in  std_logic_vector(7 downto 0);
-    bus_rdata : out std_logic_vector(7 downto 0);
-    bus_rd    : in  std_logic;
-    bus_wr    : in  std_logic;
-
-    out_en    : out std_logic
-  );
-end component;
-
 component SmartEncoderBank is
     port (
         clk          : in  std_logic;
@@ -257,39 +234,6 @@ component ClockSwitch is port(
 						   );
 end component;
 
-
--- JTAG
-component JTAGOCDPrgTop is port(
-	                      -- AVR Control
-                          ireset       : in  std_logic;
-                          cp2	       : in  std_logic;
-						  -- JTAG related inputs/outputs
-						  TRSTn        : in  std_logic; -- Optional
-	                      TMS          : in  std_logic;
-                          TCK	       : in  std_logic;
-                          TDI          : in  std_logic;
-                          TDO          : out std_logic;
-						  TDO_OE       : out std_logic;
-						  -- From the core
-                          PC           : in  std_logic_vector(15 downto 0);
-						  -- To the PM("Flash")
-						  pm_adr       : out std_logic_vector(15 downto 0);   
-						  pm_h_we      : out std_logic;
-						  pm_l_we      : out std_logic;
-						  pm_dout      : in  std_logic_vector(15 downto 0);  
-						  pm_din       : out std_logic_vector(15 downto 0);
-						  -- To the "EEPROM" 
-						  EEPrgSel     : out std_logic;
-						  EEAdr        : out std_logic_vector(11 downto 0);    
-						  EEWrData     : out std_logic_vector(7 downto 0);
-						  EERdData     : in  std_logic_vector(7 downto 0);
-						  EEWr         : out std_logic;
-						  -- CPU reset
-						  jtag_rst     : out std_logic
-                          );
-end component;
-
-
 component uart is port(
 	                -- AVR Control
                     ireset     : in  std_logic;
@@ -312,11 +256,6 @@ component uart is port(
 			        rxcirq     : out std_logic
 		            );
 end component;
-
-
-
-
-
 
 component FrqDiv is port(
                       clk_in     : in  std_logic;
@@ -344,18 +283,18 @@ component adc128s022_reader is
     );
 end component;
 
-component dp_ram_1024x12 is
-    port (
-        clk_wr   : in  std_logic;
-        addr_wr  : in  unsigned(9 downto 0);
-        data_in  : in  unsigned(11 downto 0);
-        wr_en    : in  std_logic;
-
-        clk_rd   : in  std_logic;
-        addr_rd  : in  unsigned(9 downto 0);
-        data_out : out unsigned(11 downto 0)
-    );
-end component;
+--component dp_ram_1024x12 is
+--    port (
+--        clk_wr   : in  std_logic;
+--        addr_wr  : in  unsigned(9 downto 0);
+--        data_in  : in  unsigned(11 downto 0);
+--        wr_en    : in  std_logic;
+--
+--        clk_rd   : in  std_logic;
+--        addr_rd  : in  unsigned(9 downto 0);
+--        data_out : out unsigned(11 downto 0)
+--    );
+--end component;
 
 component dp_ram_4096x12 is
     port (

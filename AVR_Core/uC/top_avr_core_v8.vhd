@@ -643,40 +643,45 @@ end generate;
 sleep_mode <= '0';
 
 
-JTAGOCDPrgTop_Inst:component JTAGOCDPrgTop port map(
-	                      -- AVR Control
-                          ireset       => core_ireset,
-                          cp2	       => core_cp2,
-						  -- JTAG related inputs/outputs
-						  TRSTn        => TRSTn, -- Optional
-	                      TMS          => TMS,
-                          TCK	       => TCK,
-                          TDI          => TDI,
-                          TDO          => TDO_Out,
-						  TDO_OE       => TDO_OE,
-						  -- From the core
-                          PC           => core_pc,
-						  -- To the PM("Flash")
-						  pm_adr       => pm_adr,
-						  pm_h_we      => pm_h_we,
-						  pm_l_we      => pm_l_we,
-						  pm_dout      => pm_dout,
-						  pm_din       => pm_din,
-						  -- To the "EEPROM" 
-						  EEPrgSel     => EEPrgSel,
-						  EEAdr        => EEAdr,
-						  EEWrData     => EEWrData,
-						  EERdData     => EERdData,
-						  EEWr         => EEWr,
-						  -- CPU reset
-						  jtag_rst     => JTAG_Rst
-                          );
+--JTAGOCDPrgTop_Inst:component JTAGOCDPrgTop port map(
+--	                      -- AVR Control
+--                          ireset       => core_ireset,
+--                          cp2	       => core_cp2,
+--						  -- JTAG related inputs/outputs
+--						  TRSTn        => TRSTn, -- Optional
+--	                      TMS          => TMS,
+--                          TCK	       => TCK,
+--                          TDI          => TDI,
+--                          TDO          => TDO_Out,
+--						  TDO_OE       => TDO_OE,
+--						  -- From the core
+--                          PC           => core_pc,
+--						  -- To the PM("Flash")
+--						  pm_adr       => pm_adr,
+--						  pm_h_we      => pm_h_we,
+--						  pm_l_we      => pm_l_we,
+--						  pm_dout      => pm_dout,
+--						  pm_din       => pm_din,
+--						  -- To the "EEPROM" 
+--						  EEPrgSel     => EEPrgSel,
+--						  EEAdr        => EEAdr,
+--						  EEWrData     => EEWrData,
+--						  EERdData     => EERdData,
+--						  EEWr         => EEWr,
+--						  -- CPU reset
+--						  jtag_rst     => JTAG_Rst
+--                          );
 
 -- JTAG OCD module connection to the external multiplexer
 io_port_out(3) <= (others => '0');
 io_port_out_en(3) <= gnd;						  
 						  
-TDO <= TDO_Out when TDO_OE='1' else 'Z'; 						  
+--TDO <= TDO_Out when TDO_OE='1' else 'Z'; 		
+pm_h_we        <= gnd;
+pm_l_we        <= gnd;
+pm_din <= (others => '0');
+pm_adr <= core_pc;		
+JTAG_Rst <= '0';		  
 
 -- *******************************************************************************************************	
 -- DMA, Memory decoder, ...

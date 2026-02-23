@@ -1,7 +1,15 @@
+--************************************************************************************************
+-- SmartEncoder module
+-- Version 1.0 (Version for Intel)
+-- Designed by Giovanni Legati
+-- M.J.E. 2026
+-- masterjoe67@hotmail.it
+--************************************************************************************************
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use work.AVRuCPackage.all; -- Assicurati che questo package definisca ENC_INDEX, ENC_DATA_HI, ENC_DATA_LO
+use work.AVRuCPackage.all; 
 
 entity SmartEncoderBank is
     port (
