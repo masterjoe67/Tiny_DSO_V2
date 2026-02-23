@@ -60,8 +60,6 @@ set_location_assignment PIN_J15 -to KEY[0]
 set_location_assignment PIN_B1 -to LED[6]
 set_location_assignment PIN_R11 -to RX
 set_location_assignment PIN_T10 -to TX
-set_location_assignment PIN_A6 -to PWM_A_H
-set_location_assignment PIN_C6 -to PWM_B_H
 set_location_assignment PIN_A15 -to LED[0]
 set_location_assignment PIN_L3 -to LED[7]
 set_location_assignment PIN_A11 -to LED[3]
@@ -88,7 +86,6 @@ set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_RO
 set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
 set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
 set_global_assignment -name VHDL_SHOW_LMF_MAPPING_MESSAGES OFF
-set_location_assignment PIN_T14 -to out100Hz
 set_location_assignment PIN_J14 -to tft_sclk
 set_location_assignment PIN_K15 -to tft_mosi
 set_location_assignment PIN_L13 -to tft_rst
@@ -184,4 +181,9 @@ set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ENC_CH_1_POS_K
 set_global_assignment -name TIMING_ANALYZER_MULTICORNER_ANALYSIS ON
 set_global_assignment -name NUM_PARALLEL_PROCESSORS 4
 set_global_assignment -name VHDL_FILE AVR_Core/SCOPE/dual_ad9226_reader.vhd
+set_global_assignment -name QIP_FILE SignalSource/PLL_GEN.qip
+set_global_assignment -name VHDL_FILE SignalSource/square_50hz_gen.vhd
+set_location_assignment PIN_B16 -to SQUARE_OUT
+set_location_assignment PIN_C16 -to TRIANGLE_OUT
+set_location_assignment PIN_D16 -to SINE_OUT
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

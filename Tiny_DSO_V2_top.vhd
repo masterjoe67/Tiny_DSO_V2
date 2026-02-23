@@ -60,8 +60,9 @@ ENTITY Tiny_DSO_V2_top IS
 		ADC_mosi :  OUT  STD_LOGIC;
 
 		KEY_COLS :  OUT  STD_LOGIC_VECTOR(2 DOWNTO 0);
-		PWM_A_H  :  OUT  STD_LOGIC;
-		PWM_B_H  :  OUT  STD_LOGIC
+		SINE_OUT    :  OUT  STD_LOGIC;
+		SQUARE_OUT  :  OUT  STD_LOGIC;
+		TRIANGLE_OUT  :  OUT  STD_LOGIC
 		
 	);
 END Tiny_DSO_V2_top;
@@ -139,6 +140,18 @@ COMPONENT triangle_50hz_pwm
     );
 end COMPONENT;
 
+COMPONENT square_50hz_gen 
+    generic (
+       
+        CLK_FREQ : integer := 50000000 
+    );
+    port (
+        clk      : in  std_logic;
+        rst_n    : in  std_logic;
+        sq_out   : out std_logic
+    );
+end COMPONENT;
+
 COMPONENT pll_master
 	PORT(inclk0 : IN STD_LOGIC;
 		 c0 : OUT STD_LOGIC;
@@ -147,10 +160,19 @@ COMPONENT pll_master
 	);
 END COMPONENT;
 
+COMPONENT PLL_GEN 
+	PORT
+	(
+		inclk0		: IN STD_LOGIC  := '0';
+		c0		: OUT STD_LOGIC 
+	);
+END COMPONENT;
+
 
 SIGNAL	clk0 :  STD_LOGIC;
 SIGNAL	clk_adc :  STD_LOGIC;
 SIGNAL	clk_spi :  STD_LOGIC;
+SIGNAL	clk_gen :  STD_LOGIC;
 SIGNAL	nrst :  STD_LOGIC;
 SIGNAL	rxd :  STD_LOGIC;
 SIGNAL	s_enc_a : std_logic_vector(6 downto 0);
@@ -208,28 +230,41 @@ PORT MAP(inclk0 => CLOCK_50,
 		 c0 => clk0,
 		 c1 => clk_adc,
 		 c2 => clk_spi);
+		 
+pll_generator_inst : pll_gen
+PORT MAP(inclk0 => CLOCK_50,
+		 c0 => clk_gen);
 
 		 
---b2v_inst3 : sine_50hz_hex 
---    generic map(
---        CLK_FREQ => 50000000
---    )
---    port map(
---        clk     => clk0,
---        rst_n   => nrst,
---        pwm_out  => PWM_A_H
---    );
---	 
---b2v_inst4 : triangle_50hz_pwm 
---    generic map(
---        CLK_FREQ => 50000000
---    )
---    port map(
---        clk     => clk0,
---        rst_n   => nrst,
---        pwm_out  => PWM_B_H
---    );
-
+b2v_inst3 : sine_50hz_hex 
+    generic map(
+        CLK_FREQ => 50000000
+    )
+    port map(
+        clk     => clk_gen,
+        rst_n   => nrst,
+        pwm_out  => SINE_OUT
+    );
+	 
+b2v_inst4 : triangle_50hz_pwm 
+    generic map(
+        CLK_FREQ => 50000000
+    )
+    port map(
+        clk     => clk_gen,
+        rst_n   => nrst,
+        pwm_out  => TRIANGLE_OUT
+    );
+dds_square_inst : square_50hz_gen 
+    generic map(
+       
+        CLK_FREQ => 50000000 
+    )
+    port map(
+        clk      => clk_gen,
+        rst_n    => nrst,
+        sq_out   => SQUARE_OUT
+    );
 
 
 s_enc_a(0) <= ENC_CH_1_POS_A;
