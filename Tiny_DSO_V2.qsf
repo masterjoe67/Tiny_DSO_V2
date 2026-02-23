@@ -58,8 +58,8 @@ set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_
 set_location_assignment PIN_R8 -to CLOCK_50
 set_location_assignment PIN_J15 -to KEY[0]
 set_location_assignment PIN_B1 -to LED[6]
-set_location_assignment PIN_T10 -to RX
-set_location_assignment PIN_R11 -to TX
+set_location_assignment PIN_R11 -to RX
+set_location_assignment PIN_T10 -to TX
 set_location_assignment PIN_A6 -to PWM_A_H
 set_location_assignment PIN_C6 -to PWM_B_H
 set_location_assignment PIN_A15 -to LED[0]
@@ -101,17 +101,6 @@ set_global_assignment -name VHDL_FILE SignalSource/clk_divider_100Hz.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/RAMAdrDcd.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/MemRdMux.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/MemArbAndMux/ArbiterAndMux.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/Resync16b_TCK.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/Resync1b_TCK.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/Resync1b_cp2.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/OCDProgTCK.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/OCDProgcp2.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGTAPCtrlSMPack.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGProgrammerPack.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGPack.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGOCDPrgTop.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGDataPack.vhd
-set_global_assignment -name VHDL_FILE AVR_Core/JTAG_OCD_Prg/JTAGCompPack.vhd
 set_global_assignment -name QIP_FILE AVR_Core/Memory/rom16kx16.qip
 set_global_assignment -name SOURCE_FILE AVR_Core/Memory/rom16kx16.cmp
 set_global_assignment -name QIP_FILE AVR_Core/Memory/dm16kx8.qip
@@ -162,12 +151,10 @@ set_global_assignment -name VHDL_FILE Tiny_DSO_V2_top.vhd
 set_global_assignment -name VHDL_FILE SignalSource/sin_Source.vhd
 set_global_assignment -name VHDL_FILE SignalSource/triangleSource.vhd
 set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/st7796_fast_ctrl.vhd
-set_global_assignment -name SIGNALTAP_FILE stp2.stp
 set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
 set_global_assignment -name VHDL_FILE AVR_Core/Peripheral/SmartEncoderBank.vhd
 set_location_assignment PIN_N11 -to ENC_TBASE_B
 set_location_assignment PIN_P9 -to ENC_TBASE_A
-set_global_assignment -name SIGNALTAP_FILE stp1.stp
 set_location_assignment PIN_J13 -to ENC_CH_1_POS_B
 set_location_assignment PIN_M10 -to ENC_CH_1_POS_K
 set_location_assignment PIN_J16 -to ENC_CH_1_POS_A

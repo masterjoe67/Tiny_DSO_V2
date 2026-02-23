@@ -1,5 +1,5 @@
 --************************************************************************************************
--- Top entity for DSO
+-- Top entity for DSO logic
 -- Version 0.5 (Version for Intel)
 -- Designed by Giovanni Legati
 -- M.J.E. 2026

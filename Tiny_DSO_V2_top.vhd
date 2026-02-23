@@ -1,4 +1,10 @@
-
+--************************************************************************************************
+-- Top entity for Tiny_DSO
+-- Version 1.0 (Version for Intel)
+-- Designed by Giovanni Legati
+-- M.J.E. 2026
+-- masterjoe67@hotmail.it
+--************************************************************************************************
 
 LIBRARY ieee;
 USE ieee.std_logic_1164.all; 
