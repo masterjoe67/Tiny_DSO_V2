@@ -1,0 +1,55 @@
+RELAZIONE TECNICA: SISTEMA DI ACQUISIZIONE DIGITALE ALTE PRESTAZIONI (DSO TINY_V2)
+
+1. ABSTRACT
+Il presente documento descrive la progettazione di un oscilloscopio digitale (DSO) basato su architettura SoC (System-on-Chip) integrata su FPGA. 
+Il sistema campiona segnali analogici con risoluzione di 12 bit a una frequenza di 65 MSPS, 
+elaborando i dati tramite un core processore sintetizzato e visualizzando le forme d'onda su un display LCD TFT in tempo reale.
+
+2. ARCHITETTURA HARDWARE
+Il sistema sfrutta la logica programmabile per gestire flussi di dati ad alta velocità, eliminando i colli di bottiglia dei microcontrollori standard.
+
+2.1 Front-end di Acquisizione
+L'acquisizione è affidata a un convertitore analogico-digitale (ADC) AD9226. 
+L'interfaccia parallela a 12 bit permette il trasferimento di un campione completo per ogni ciclo di clock, garantendo un throughput di 780 Mbit/s.
+
+2.2 Logica FPGA (Cyclone IV)
+All'interno della FPGA Intel Altera Cyclone IV sono implementati i seguenti moduli:
+
+GESTIONE CLOCK (PLL): Genera un clock di sistema a 60 MHz e un clock di campionamento a 65 MHz sincronizzati.
+
+UNITA' DI TRIGGER HARDWARE: Comparatore digitale a 65 MHz che garantisce una risoluzione temporale di 15,3 ns per la cattura di eventi transienti.
+
+INTERFACCIA MEMORIA: Buffer circolari basati su Block RAM per la memorizzazione dei campioni.
+
+3. ARCHITETTURA SOFTWARE E FIRMWARE
+La gestione dell'interfaccia utente è affidata a un Soft-Processor AVR V8 sintetizzato nella FPGA.
+
+3.1 Toolchain e Ottimizzazione
+
+Compilatore: AVR-GCC 15.1 (ultima versione disponibile).
+
+Ottimizzazione: Utilizzo di Link-Time Optimization (LTO) per massimizzare l'efficienza della memoria.
+
+Memory Mapping: Registri hardware mappati direttamente nello spazio di indirizzamento della CPU per accesso a bassa latenza.
+
+3.2 Algoritmi di Visualizzazione
+Il firmware utilizza un driver ottimizzato per il controller ST7789. 
+Viene applicata una tecnica di "disegno differenziale" per minimizzare il traffico sul bus SPI, garantendo un refresh rate elevato e senza sfarfallio.
+
+4. SPECIFICHE TECNICHE
+
+Frequenza Campionamento: 65 MSPS (Real-time)
+
+Risoluzione ADC: 12 Bit (4096 livelli)
+
+Core Processore: AVR V8 compatibile @ 60 MHz
+
+Latenza di Trigger: 1 ciclo di clock (15.4 ns)
+
+Interfaccia Display: SPI Hardware High-Speed
+
+Memoria Buffer: 4k campioni per canale (Block RAM)
+
+5. CONCLUSIONI
+L'integrazione di un convertitore parallelo ad alta velocità con una logica FPGA e un soft-core dedicato ha permesso di superare i limiti dei DSO portatili economici. 
+Il sistema rappresenta una base solida per futuri sviluppi come l'analisi spettrale (FFT).
