@@ -37,7 +37,7 @@ bool time_div_sel_changed = true;
 static trigger_mode_t trigger_mode = TRIG_MODE_AUTO;
 static trig_slope_t trigger_slope = TRIG_SLOPE_RISING;
 static uint8_t trigger_source = 1;
-static tdiv_pan_t   mode_tdiv_pan = T_DIV;
+//static tdiv_pan_t   mode_tdiv_pan = T_DIV;
 
 uint8_t currentMenu = MENU_CH1; // Default
 
@@ -46,7 +46,7 @@ uint16_t ch1_color = YELLOW; // Il colore del canale 2
 uint16_t ch2_color = CYAN; // Il colore del canale 2
 
 bool ch_visible[2] = {true, true}; 
-uint8_t* buffers_vecchi[2] = {old_buffer_a, old_buffer_b}; // Puntatori ai tuoi buffer di cancellazione
+uint16_t* buffers_vecchi[2] = {old_buffer_a, old_buffer_b}; // Puntatori ai tuoi buffer di cancellazione
 
 uint16_t trigger_level_12bit = 0x07FF;
 uint16_t y_offset_ch[2] = {120, 120};

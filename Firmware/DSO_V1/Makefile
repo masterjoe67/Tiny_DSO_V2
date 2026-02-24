@@ -78,10 +78,10 @@ $(LST): $(ELF)
 report:
 	@echo "---------------------------------------"
 	@echo "Core sintetizzato: $(ARCH)"
-	@echo "Flash: $(FLASH_SIZE) bytes ($(PMEM_WORDS) parole da 2 byte)"
+	@echo "Flash: $(FLASH_SIZE) bytes"
 	@echo "SRAM:  $(SRAM_SIZE) bytes"
 	@echo "---------------------------------------"
-	@avr-size --format=avr $(ELF)
+	@avr-size -B $(ELF)
 
 # -------------------------------------------------------------------
 # Clean

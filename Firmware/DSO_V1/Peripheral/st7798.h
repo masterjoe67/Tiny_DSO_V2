@@ -50,7 +50,6 @@
 #define PURPLE      0x780F
 #define OLIVE       0x7BE0
 #define LIGHTGREY   0xC618
-#define DARKGREY    0x7BEF
 
 // Colori Brillanti (Ideali per tracce DSO)
 #define BLUE        0x001F
@@ -73,9 +72,9 @@
   #include "glcdfont.c"
 #endif
 
-uint16_t textcolor, textbgcolor, fontsloaded, addr_row, addr_col;
-int16_t  cursor_x, cursor_y, win_xe, win_ye, padX;
-uint8_t  textfont, textsize, textdatum, rotation;
+extern uint16_t textcolor, textbgcolor, fontsloaded, addr_row, addr_col;
+extern int16_t  cursor_x, cursor_y, win_xe, win_ye, padX;
+extern uint8_t  textfont, textsize, textdatum, rotation;
 
 typedef struct {
 	const unsigned char *chartbl;
@@ -88,7 +87,7 @@ typedef struct {
     int16_t y;
 } Point_t;
 
-void tft_init();
+void tft_init(void);
 void tft_setRotation(uint8_t m);
 static inline void tft_data16(uint16_t color);
 void setTextColor(uint16_t c, uint16_t b);

@@ -7,7 +7,7 @@
 #include "Peripheral/input.h"
 #include "Peripheral/uart.h"
 #include "Peripheral/leds.h"
-//#include "scope.h"
+#include "scope.h"
 
 // ------------------------------------------------
 // Main

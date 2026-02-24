@@ -102,7 +102,11 @@ typedef enum {
 } tdiv_pan_t;
 
 
-
+void updateSidebarLabels(void);
+void conf_encoder(void);
+float read_fpga_frequency(void);
+void drawStaticInterface(void);
+void toggleTrigLevelMode(void);
 // Funzioni di inizializzazione
 //void osc_init_base_time(uint32_t base_time);
 void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,

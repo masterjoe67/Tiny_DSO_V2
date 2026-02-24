@@ -1,6 +1,7 @@
  #include <avr/io.h>
 #include <util/delay.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <avr/pgmspace.h>
 #include "st7798.h"
 #include "Font16.h"
@@ -8,10 +9,13 @@
 uint16_t _width = 320;
 uint16_t _height = 480;
 uint8_t  _rotation = 0;
+uint16_t textcolor, textbgcolor, fontsloaded, addr_row, addr_col;
+int16_t  cursor_x, cursor_y, win_xe, win_ye, padX;
+uint8_t  textfont, textsize, textdatum, rotation;
 
-static uint16_t text_color = 0xFFFF;   // default bianco
+/*static uint16_t text_color = 0xFFFF;   // default bianco
 static uint16_t text_bg = 0x0000;      // default nero
-static uint8_t text_size = 1;
+static uint8_t text_size = 1;*/
 
 bool  textwrap = true;
 
@@ -63,6 +67,8 @@ const PROGMEM fontinfo fontdata [] = {
     #define swap(a, b)  do { int _t = (a); (a) = (b); (b) = _t; } while(0)
 #endif
 
+static inline void tft_wait(void);
+void tft_init_full_sequence(void);
 static void swap_int16(int16_t *a, int16_t *b)
 {
     int16_t t = *a;
