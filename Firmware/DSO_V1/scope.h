@@ -47,12 +47,30 @@
 #define COUPL_AC  1
 #define COUPL_GND 2
 
+/********************************************************* */
+/*     KEY DEFINITION                                      */
+/********************************************************* */
+
+#define KEY_CH1        0x0D
+#define KEY_CH2        0x0E
+#define KEY_TRIGGER    0x0B
+#define KEY_TBASE      0x0A
+#define KEY_SINGLE     0x07
+#define KEY_RUN        0x08
+#define KEY_CNTX1      0x0C
+#define KEY_CNTX2      0x09
+#define KEY_CNTX3      0x06
+#define KEY_CNTX4      0x03
+#define KEY_CNTX5      0x00
+
+
+
 // Encoder mode
-#define MODE_NONE       0
+/*#define MODE_NONE       0
 #define MODE_Y_POS      1
 #define MODE_TRIG_LEVEL 2
 #define MODE_TBASE      3
-#define MODE_PAN        4
+#define MODE_PAN        4*/
 
 #define MAX_TIMEBASE_IDX 18
 

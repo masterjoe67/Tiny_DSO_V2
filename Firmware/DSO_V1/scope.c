@@ -60,7 +60,6 @@ uint8_t ch_probe[2] = {0, 0};
 // Variabili globali per il calcolo delle tensioni
 float ch_multiplier[2] = {1.0, 1.0};
 bool ch_inverted[2] = {false, false};
-uint8_t encoderMode = MODE_NONE;
 int16_t last_trig_y = -1; // Per cancellare la vecchia linea
 
 uint8_t current_time_base_idx = 0;
@@ -528,14 +527,14 @@ void drawStaticInterface() {
         drawMenuButton(1, coupLbl, false, WHITE);
         drawMenuButton(2, probLbl, false, WHITE);
         drawMenuButton(3, ch_inverted[idx] ? "-INV-" : "INVERT", false, WHITE);
-        drawMenuButton(4, (encoderMode == MODE_Y_POS) ? "> POS <" : "POSITION", false, WHITE);
+        //drawMenuButton(4, (encoderMode == MODE_Y_POS) ? "> POS <" : "POSITION", false, WHITE);
     }
     else if (currentMenu == MENU_TRIG) {
         drawMenuButton(0, (trigger_mode == 0) ? "AUTO" : "NORMAL", true, WHITE);
         drawMenuButton(1, trigger_slope ? "RISE" : "FALL", false, WHITE);
         drawMenuButton(2, (trigger_source == 1) ? "CH1" : "CH2", false, WHITE);
-        drawMenuButton(3, (encoderMode == MODE_TRIG_LEVEL) ? "> LEV <" : "LEVEL", false, WHITE);
-        drawMenuButton(4, "BACK", false, WHITE);
+        //drawMenuButton(3, (encoderMode == MODE_TRIG_LEVEL) ? "> LEV <" : "LEVEL", false, WHITE);
+        //drawMenuButton(4, "BACK", false, WHITE);
     }
 
     // 6. Ripristina la griglia
@@ -678,7 +677,7 @@ void updateSidebarLabels() {
             menuColor = YELLOW; // Colore linea trigger
             break;
             
-        case MENU_TBASE:
+        /*case MENU_TBASE:
             menuTitle = "T-BASE";
             menuColor = WHITE;
             break;
@@ -686,7 +685,7 @@ void updateSidebarLabels() {
         case MENU_PAN:
             menuTitle = " PAN  ";
             menuColor = MAGENTA;
-            break;
+            break;*/
             
         default:
             menuTitle = " MENU ";
@@ -720,7 +719,7 @@ void updateSidebarLabels() {
         drawMenuButton(3, ch_inverted[chIdx] ? "-INV-" : "INVERT", ch_inverted[chIdx], WHITE);
 
         // TASTO 4: Posizione Y (Visualizziamo se l'encoder la sta controllando)
-        drawMenuButton(4, (encoderMode == MODE_Y_POS) ? "> POS <" : "POSITION", (encoderMode == MODE_Y_POS), WHITE);
+        //drawMenuButton(4, (encoderMode == MODE_Y_POS) ? "> POS <" : "POSITION", (encoderMode == MODE_Y_POS), WHITE);
     } 
     
     else if (currentMenu == MENU_TRIG) {
@@ -734,7 +733,7 @@ void updateSidebarLabels() {
         //drawMenuButton(2, (trigger_source == 1) ? "SRC: CH1" : "SRC: CH2", true, WHITE);
         drawMenuButton(2, (trigger_mode == 0) ? "MODE: AUTO" : "MODE: NORM", true, WHITE);
         // TASTO 3: Livello (LEVEL)
-        drawMenuButton(3, (encoderMode == MODE_TRIG_LEVEL) ? "> LEV <" : "LEVEL", (encoderMode == MODE_TRIG_LEVEL), WHITE);
+        //drawMenuButton(3, (encoderMode == MODE_TRIG_LEVEL) ? "> LEV <" : "LEVEL", (encoderMode == MODE_TRIG_LEVEL), WHITE);
 
         // TASTO 4: Ritorno
         drawMenuButton(4, "BACK", false, WHITE);
@@ -782,40 +781,6 @@ void toggleInvert(uint8_t ch)
     uint16_t color = WHITE;
     // Il tasto fisico 3 (ev 3) corrisponde al quarto bottone (indice 3)
     drawMenuButton(3, label, ch_inverted[idx], color); 
-}
-
-void toggleYPosMode(uint8_t ch) {
-    // Se era già attivo, lo spegniamo (toggle), altrimenti lo attiviamo
-    if (encoderMode == MODE_Y_POS) {
-        encoderMode = MODE_NONE;
-    } else {
-        encoderMode = MODE_Y_POS;
-    }
-
-    // Aggiorniamo la grafica per far capire all'utente che l'encoder è attivo
-    //uint16_t color = (ch == 1) ? YELLOW : CYAN;
-    uint16_t color = WHITE;
-    const char* label = (encoderMode == MODE_Y_POS) ? "> POS <" : "POS Y";
-    
-    // Il tasto 0 (ev 0) è il quinto bottone (indice 4)
-    drawMenuButton(4, label, (encoderMode == MODE_Y_POS), color);
-}
-
-void toggleTrigLevelMode() {
-    // Se era già attivo, lo spegniamo (toggle), altrimenti lo attiviamo
-    if (encoderMode == MODE_TRIG_LEVEL) {
-        encoderMode = MODE_NONE;
-    } else {
-        encoderMode = MODE_TRIG_LEVEL;
-    }
-
-    // Aggiorniamo la grafica per far capire all'utente che l'encoder è attivo
-    //uint16_t color = (ch == 1) ? YELLOW : CYAN;
-    uint16_t color = WHITE;
-    const char* label = (encoderMode == MODE_TRIG_LEVEL) ? "> LEVEL <" : "LEVEL";
-    
-    // Il tasto 0 (ev 0) è il quinto bottone (indice 4)
-    drawMenuButton(4, label, (encoderMode == MODE_Y_POS), color);
 }
 
 int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
@@ -1191,10 +1156,10 @@ void scope_main(void)
         
         
         if(ev != 0xFF){
-           /* uart_print("Event: ");
+            uart_print("Event: ");
             uart_print_hex(ev);
             uart_print("\r\n");
-            tft_fillRect(100, 100, 100, 16, BLACK);
+           /* tft_fillRect(100, 100, 100, 16, BLACK);
         setTextColor(YELLOW, BLACK);
         tft_set_cursor(100, 100);
         tft_Print("CH2: ");
@@ -1203,15 +1168,13 @@ void scope_main(void)
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
-                case 7: // Tasto PAN 
+                case 20: // Tasto PAN 
                     if(currentMenu == MENU_PAN) view_offset = 0; //Riporta in centro
                     else{
-                        currentMenu = MENU_PAN;
-                        encoderMode = MODE_PAN;
-                        updateSidebarLabels(); // Ridisegna etichette 
+                        
                     }
                     break;
-                case 8:
+                case KEY_RUN:
                     if(trigger_mode == TRIG_MODE_SINGLE)
                         is_running = true;
                     else
@@ -1225,7 +1188,7 @@ void scope_main(void)
                     }
                     update_status_bar(true);
                     break;
-                case 5:
+                case KEY_SINGLE:
                     trigger_mode = TRIG_MODE_SINGLE;
                     set_trigger_mode(trigger_mode, trigger_slope, trigger_source);
                     freeze = false;     // Fondamentale: permette a osc_read_triggered di armare
@@ -1235,20 +1198,19 @@ void scope_main(void)
                     update_status_bar(true);
                     break;
 
-                case 10: // Ipotetico tasto fisico "Trigger"
+                case KEY_TRIGGER: // Ipotetico tasto fisico "Trigger"
                     currentMenu = MENU_TRIG;
                     updateSidebarLabels(); // Ridisegna etichette 
                     break;
-                case 11: // Ipotetico tasto fisico "T/Div"
+                case 21: // Ipotetico tasto fisico "T/Div"
                     currentMenu = MENU_TBASE;
-                    encoderMode = MODE_TBASE;
                     updateSidebarLabels(); // Ridisegna etichette 
                     break;
-                case 13: // Ipotetico tasto fisico "Vertical CH1"
+                case KEY_CH1: // Ipotetico tasto fisico "Vertical CH1"
                     currentMenu = MENU_CH1;
                     updateSidebarLabels(); // Ridisegna etichette 
                     break;
-                case 14: // Ipotetico tasto fisico "Vertical CH2"
+                case KEY_CH2: // Ipotetico tasto fisico "Vertical CH2"
                     currentMenu = MENU_CH2;
                     updateSidebarLabels(); // Ridisegna etichette 
                     break;
@@ -1285,7 +1247,7 @@ void scope_main(void)
                             break;
 
                         case 0:  // Tasto 5 (Bottom) -> EXIT
-                            toggleYPosMode(1);
+                            //toggleYPosMode(1);
                             break;
                     }
                     break;
@@ -1308,7 +1270,7 @@ void scope_main(void)
                             break;
 
                         case 0:  // Tasto 5 (Bottom) -> EXIT
-                            toggleYPosMode(2);
+                            //(2);
                             break;
                     }
                     break;
@@ -1335,14 +1297,14 @@ void scope_main(void)
                             break;
 
                         case 3:  // Tasto 4 -> Attiva Encoder per il LEVEL
-                            toggleTrigLevelMode();
-                            updateSidebarLabels();
+                            //toggleTrigLevelMode();
+                            //updateSidebarLabels();
                             break;
 
                         case 0:  // Tasto 5 (Bottom) -> EXIT
                             //currentMenu = MENU_NONE; // O torna al menu precedente
                             //drawStaticInterface();   // Ridisegna tutto per pulire la sidebar
-                            encoderMode = MODE_NONE; 
+                            
                             updateSidebarLabels();
                             break;
                     }

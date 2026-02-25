@@ -71,14 +71,14 @@ set_location_assignment PIN_B10 -to ADC_mosi
 set_location_assignment PIN_B14 -to ADC_sclk
 set_location_assignment PIN_A10 -to ADC_cs_n
 set_location_assignment PIN_A9 -to ADC_miso
-set_location_assignment PIN_E8 -to KEY_ROWS[1]
-set_location_assignment PIN_E7 -to KEY_ROWS[2]
-set_location_assignment PIN_C8 -to KEY_ROWS[3]
-set_location_assignment PIN_A7 -to KEY_ROWS[4]
-set_location_assignment PIN_F9 -to KEY_ROWS[0]
-set_location_assignment PIN_B6 -to KEY_COLS[1]
-set_location_assignment PIN_A5 -to KEY_COLS[2]
-set_location_assignment PIN_B7 -to KEY_COLS[0]
+set_location_assignment PIN_T12 -to KEY_ROWS[1]
+set_location_assignment PIN_T13 -to KEY_ROWS[2]
+set_location_assignment PIN_T15 -to KEY_ROWS[3]
+set_location_assignment PIN_F13 -to KEY_ROWS[4]
+set_location_assignment PIN_T11 -to KEY_ROWS[0]
+set_location_assignment PIN_R13 -to KEY_COLS[1]
+set_location_assignment PIN_R12 -to KEY_COLS[2]
+set_location_assignment PIN_T14 -to KEY_COLS[0]
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
 set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top

@@ -37,4 +37,4 @@ Il software gestisce l'intelligenza dello strumento:
 - **Hardware ADC:** Modulo AD9226 (12-bit, 65MSPS).
 
 ---
-*Developed by MJE - 2026*
+*Developed by MJE 2026. Special thanks to M. Montanari for the experimental PCB layout and wiring.*
