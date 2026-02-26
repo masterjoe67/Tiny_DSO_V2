@@ -64,13 +64,27 @@
 #define KEY_CNTX5      0x00
 
 
+// Valori di default per gli encoder (minimo, massimo step, valore iniziale)
+#define OFFSET_Y_MIN -50
+#define OFFSET_Y_MAX 250
+#define OFFSET_Y_STEP 2
+#define OFFSET_Y1_C_VAL 120
+#define OFFSET_Y2_C_VAL 120
 
-// Encoder mode
-/*#define MODE_NONE       0
-#define MODE_Y_POS      1
-#define MODE_TRIG_LEVEL 2
-#define MODE_TBASE      3
-#define MODE_PAN        4*/
+#define VDIVCH_MIN 1
+#define VDIVCH_MAX 10
+#define VDIVCH_STEP 1
+#define VDIVCH_C_VAL 5
+
+#define TDIV_MIN 0
+#define TDIV_MAX 16
+#define TDIV_STEP 1
+#define TDIV_C_VAL 11
+
+#define TRIG_MIN 0
+#define TRIG_MAX 4095
+#define TRIG_STEP 64
+#define TRIG_C_VAL 2048
 
 #define MAX_TIMEBASE_IDX 18
 
@@ -81,7 +95,31 @@ extern uint8_t  _rotation;
 // Buffer interni
 extern uint8_t buffer_a[BUFFER_TOTAL];
 extern uint8_t buffer_b[BUFFER_TOTAL];
-extern uint8_t buffer_c[BUFFER_TOTAL];
+//extern uint8_t buffer_c[BUFFER_TOTAL];
+
+typedef struct {
+    uint8_t enabled;      // 0 = Spento, 1 = Acceso
+    uint8_t focused;      // 1 = Il menu attuale è dedicato a questo canale
+    float volts_div;      // Scala verticale
+    int16_t offset;       // Posizione verticale sullo schermo
+    uint8_t inverted;     // 0 = Normale, 1 = Invertito
+    uint8_t coupling; // Tipo di accoppiamento (DC, AC, GND)
+    uint8_t old_coupling; // Per rilevare cambiamenti e aggiornare a schermo
+    uint8_t vdiv_idx;     // Indice per il Volt/Div (0-9)
+    uint8_t old_vdiv_idx; // Per rilevare cambiamenti e aggiornare a
+    uint8_t probe;       // Tipo di sonda (1X, 10X, 100X)
+    uint8_t bw_limit;  // 0: Full BW, 1: 20MHz Limit
+    float multiplier;    // Fattore di moltiplicazione per calcolare la tensione reale
+    uint16_t old_offset;
+    uint16_t color;        // Colore della traccia
+    Point_t gnd_mark_a;
+    Point_t gnd_mark_b;
+    Point_t gnd_mark_c;
+    
+    
+} Channel;
+
+Channel ch1, ch2;
 
 typedef enum {
     UI_STATUS_STOP = 0,

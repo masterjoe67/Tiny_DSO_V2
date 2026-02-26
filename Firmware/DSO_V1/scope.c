@@ -19,10 +19,10 @@
 
 uint8_t buffer_a[BUFFER_TOTAL];
 uint8_t buffer_b[BUFFER_TOTAL];
-//uint8_t buffer_c[BUFFER_TOTAL];
+
 uint16_t old_buffer_a[400];
 uint16_t old_buffer_b[400];
-//uint8_t old_buffer_c[300];
+
 
 uint8_t time_div_sel = 10;
 uint8_t prev_time_div_sel = 0xFF; // valore precedente (inesistente all'inizio)
@@ -37,29 +37,15 @@ bool time_div_sel_changed = true;
 static trigger_mode_t trigger_mode = TRIG_MODE_AUTO;
 static trig_slope_t trigger_slope = TRIG_SLOPE_RISING;
 static uint8_t trigger_source = 1;
-//static tdiv_pan_t   mode_tdiv_pan = T_DIV;
 
 uint8_t currentMenu = MENU_CH1; // Default
 
 
-uint16_t ch1_color = YELLOW; // Il colore del canale 2
-uint16_t ch2_color = CYAN; // Il colore del canale 2
-
-bool ch_visible[2] = {true, true}; 
+//bool ch_visible[2] = {true, true}; 
 uint16_t* buffers_vecchi[2] = {old_buffer_a, old_buffer_b}; // Puntatori ai tuoi buffer di cancellazione
 
 uint16_t trigger_level_12bit = 0x07FF;
-uint16_t y_offset_ch[2] = {120, 120};
 
-//uint8_t ch1_coupling = COUPL_DC; // Stato iniziale
-//uint8_t ch2_coupling = COUPL_DC; // Stato iniziale
-// Array per memorizzare il fattore di attenuazione dei canali
-uint8_t ch_coupling[2] = {COUPL_DC, COUPL_DC};
-// 0 = 1X, 1 = 10X, 2 = 100X
-uint8_t ch_probe[2] = {0, 0};
-// Variabili globali per il calcolo delle tensioni
-float ch_multiplier[2] = {1.0, 1.0};
-bool ch_inverted[2] = {false, false};
 int16_t last_trig_y = -1; // Per cancellare la vecchia linea
 
 uint8_t current_time_base_idx = 0;
@@ -73,12 +59,11 @@ const char* v_div_labels[] = {
 };
 
 #define MAX_VDIV_IDX 9
-uint8_t ch1_vdiv_idx = 6; // Default a 1V/div
-uint8_t ch2_vdiv_idx = 6; // Default a 1V/div
 
-uint8_t old_ch1_vdiv_idx, old_ch2_vdiv_idx, old_current_time_base_idx = 0xFF;
 
-uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
+uint8_t old_current_time_base_idx = 0xFF;
+
+//uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
 uint16_t old_trigger_level_12bit = 0xFFFF;
 uint32_t old_freq = 0xFFFFFFFF;
 
@@ -88,7 +73,7 @@ Point_t old_c = { 0, 0 };
 Point_t gnd_mark_a[2] = {{ 0, 0 }, { 0, 0 }};
 Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
 Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
-uint16_t old_y_offset_ch[2];
+
 
 const char* time_base_labels[] = {
     "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
@@ -370,11 +355,11 @@ static inline void osc_write_view_offset(int16_t offset)
 
 void drawPanTrack(){
 
-    int16_t offset = (TRACE_W / 2) - view_offset + MARGIN_X;
+    int16_t offset = (TRACE_W / 2) - view_offset + MARGIN_X + 1; // +1 per allineare meglio il triangolo alla griglia
 
     Point_t a = { offset - 5, MARGIN_Y };
     Point_t b = { offset + 5, MARGIN_Y };
-    Point_t c = { offset, MARGIN_Y + 15 };
+    Point_t c = { offset, MARGIN_Y + 10 };
     
     if(pan_flag){
         tft_FillTriangle(old_a, old_b, old_c, BLACK);
@@ -386,7 +371,7 @@ void drawPanTrack(){
 }
 
 
-void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
+/*void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
     // 1. Calcoliamo la posizione Y dello zero (valore ADC 128)
     // Usiamo la stessa identica formula della tua draw_trace
     int16_t y_zero = 64 + y_offset_ch[channel_idx];
@@ -417,30 +402,61 @@ void draw_ground_marker(uint8_t channel_idx, uint16_t color) {
     //tft_set_cursor(x_base + 1, y_zero - 3);
     //tft_print_int(channel_idx + 1);
     drawPanTrack();
+}*/
+
+void draw_ground_marker2(Channel *ch) {
+    // 1. Calcoliamo la posizione Y usando l'offset contenuto nella struct
+    // y_zero = centro dello schermo (es. 64) + offset del canale
+    int16_t y_zero = 64 + ch->offset;
+
+    // 2. Gestione della cancellazione (se l'offset è cambiato)
+    // Nota: qui dovresti aggiungere 'old_offset' alla struct Channel 
+    // per un confronto preciso, oppure cancellare prima di aggiornare.
+    if(ch->offset != ch->old_offset) {
+        tft_FillTriangle(ch->gnd_mark_a, ch->gnd_mark_b, ch->gnd_mark_c, BLACK);
+    }
+
+    // 3. Coordinate del marker
+    // Usiamo le variabili interne alla struct per i vertici
+    uint16_t x_tip = MARGIN_X + 8;
+    uint16_t x_base = MARGIN_X;
+
+    ch->gnd_mark_a.x = x_base;
+    ch->gnd_mark_a.y = y_zero - 5;
+    
+    ch->gnd_mark_b.x = x_base;
+    ch->gnd_mark_b.y = y_zero + 5;
+    
+    ch->gnd_mark_c.x = x_tip;
+    ch->gnd_mark_c.y = y_zero;
+
+    // 4. Disegno del triangolo
+    // Se il canale è a fuoco (focused), potresti disegnarlo più luminoso 
+    // o con un bordo bianco per imitare il Tek!
+    uint16_t draw_color = ch->color;
+    if (!ch->focused) {
+        // Se non ha il focus, rendiamo il colore un po' più scuro/spento
+        // (Esempio rudimentale di bit-shift per scurire l'RGB565)
+        draw_color = (ch->color >> 1) & 0x7BEF; 
+    }
+
+    tft_FillTriangle(ch->gnd_mark_a, ch->gnd_mark_b, ch->gnd_mark_c, draw_color);
+
+    // 5. Opzionale: Numero del canale accanto al marker
+   /* if (ch->focused) {
+        tft_setTextColor(WHITE, BLACK); // Bianco se selezionato
+    } else {
+        tft_setTextColor(draw_color, BLACK);
+    }
+    
+    // Posizioniamo il cursore e stampiamo il numero (1 o 2)
+    // ch == &ch1 ? 1 : 2
+    tft_set_cursor(x_base + 1, y_zero - 4);
+    tft_print_int(ch == &ch1 ? 1 : 2);*/
+
+    drawPanTrack();
 }
 
-void acquire_and_draw2(){
-    // Se siamo in STOP manuale e non stiamo facendo un SINGLE che ha appena finito
-    if (!is_running && (trigger_mode != TRIG_MODE_SINGLE || freeze)) {
-        return; 
-    }
-    tft_drawGrid(LIGHTGREY);
-    osc_read_triggered(buffer_a, buffer_b);
-    //if (ch_visible[0]) {
-        draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0], ch_visible[0], true);
-   // }
-    
-    // Disegna CH2 solo se è visibile
-    //if (ch_visible[1]) {
-        draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1], ch_visible[1], true);
-    //}
-    draw_trigger_line(trigger_level_12bit, YELLOW, false);
-    draw_ground_marker(0, GREEN);
-    draw_ground_marker(1, RED);
-    //draw_trace(buffer_a, old_buffer_a, 400, CH0_Y, GREEN);
-    //draw_trace(buffer_b, old_buffer_b, 400, CH0_Y, RED);
-    
-}
 
 void acquire_and_draw(){
     // 1. ACQUISIZIONE (Condizionale)
@@ -457,15 +473,17 @@ void acquire_and_draw(){
     tft_drawGrid(LIGHTGREY);
 
     // Disegna CH1 (buffer_a contiene l'ultima cattura, il pan lo sposta dentro draw_trace)
-    draw_trace(buffer_a, old_buffer_a, 400, y_offset_ch[0], GREEN, ch_inverted[0], ch_visible[0], true);
+    draw_trace(buffer_a, old_buffer_a, 400, ch1.offset, ch1.color, ch1.inverted, ch1.enabled , true);
     
     // Disegna CH2
-    draw_trace(buffer_b, old_buffer_b, 400, y_offset_ch[1], RED, ch_inverted[1], ch_visible[1], true);
+    draw_trace(buffer_b, old_buffer_b, 400, ch2.offset, ch2.color, ch2.inverted, ch2.enabled, true);
     
     // UI e Marker (Sempre visibili per poterli muovere in STOP)
     draw_trigger_line(trigger_level_12bit, YELLOW, false);
-    draw_ground_marker(0, GREEN);
-    draw_ground_marker(1, RED);
+    draw_ground_marker2(&ch1);
+    draw_ground_marker2(&ch2);
+    /*draw_ground_marker(0, GREEN);
+    draw_ground_marker(1, RED);*/
 }
 
 void drawMenuButton(uint8_t index, const char* label, bool active, uint16_t color) {
@@ -496,9 +514,9 @@ void drawStaticInterface() {
     
     // 2. Barra Superiore (Status e Misure rapide)
     tft_fillRect(0, 0, 480, 20, DARKGREY);
-    tft_printAt("RUN", 10, 5, GREEN, DARKGREY);
+    tft_printAt("Mje", 10, 5, GREEN, DARKGREY);
     //tft_printAt("T: 100uS", 120, 5, WHITE, DARKGREY);
-    tft_printAt("Vpp: 3.24V", 250, 5, YELLOW, DARKGREY);
+    //tft_printAt("Vpp: 3.24V", 250, 5, YELLOW, DARKGREY);
 
     // --- TITOLO MENU A DESTRA (Sopra i tasti) ---
     const char* menuName;
@@ -513,35 +531,65 @@ void drawStaticInterface() {
     tft_drawRect(MARGIN_X - 1, MARGIN_Y - 1, TRACE_W + 2, TRACE_H + 2, WHITE);
     
     // 4. Linea di divisione Sidebar
-    tft_drawLine(SIDEBAR_X - 2, 20, SIDEBAR_X - 2, 320, GREY);
+    tft_drawLine(SIDEBAR_X - 2, 20, SIDEBAR_X - 2, TRACE_H + MARGIN_Y, GREY);
 
-    // 5. Disegno dei 5 Soft-Keys (Tutti BIANCHI come richiesto)
-    if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
+    // 5. Disegno dei 5 Soft-Keys 
+    /*if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
         uint8_t idx = (currentMenu == MENU_CH1) ? 0 : 1;
         
         // Etichette dinamiche per accoppiamento e sonda
         const char* coupLbl = (ch_coupling[idx] == COUPL_DC) ? "DC" : (ch_coupling[idx] == COUPL_AC ? "AC" : "GND");
         const char* probLbl = (ch_probe[idx] == 0) ? "1X" : (ch_probe[idx] == 1 ? "10X" : "100X");
 
-        drawMenuButton(0, ch_visible[idx] ? (idx==0?"CH1 ON":"CH2 ON") : (idx==0?"CH1 OFF":"CH2 OFF"), true, WHITE);
+        //drawMenuButton(0, ch_visible[idx] ? (idx==0?"CH1 ON":"CH2 ON") : (idx==0?"CH1 OFF":"CH2 OFF"), true, WHITE);
+        drawMenuButton(0, "nn", true, WHITE);
         drawMenuButton(1, coupLbl, false, WHITE);
         drawMenuButton(2, probLbl, false, WHITE);
-        drawMenuButton(3, ch_inverted[idx] ? "-INV-" : "INVERT", false, WHITE);
+        drawMenuButton(3, ch1.inverted ? "-INV-" : "INVERT", false, WHITE);
         //drawMenuButton(4, (encoderMode == MODE_Y_POS) ? "> POS <" : "POSITION", false, WHITE);
-    }
+    }*/
+    /*if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
+    // 1. Identifichiamo il canale corrente tramite puntatore
+    Channel *ch = (currentMenu == MENU_CH1) ? &ch1 : &ch2;
+    
+    // 2. Etichette dinamiche (Molto più leggibili leggendo dalla struct)
+    const char* coupLbl = (ch->coupling == COUPL_DC) ? "DC" : 
+                          (ch->coupling == COUPL_AC) ? "AC" : "GND";
+                          
+    const char* probLbl = (ch->probe == 0) ? "1X" : 
+                          (ch->probe == 1) ? "10X" : "100X";
+
+    // 3. Disegno dei bottoni (Stile Tektronix)
+    
+    // TASTO 0: Stato visibilità (On/Off)
+    //drawMenuButton(0, ch->enabled ? "ON" : "OFF", ch->enabled, WHITE);
+    
+    // TASTO 1: Accoppiamento
+    drawMenuButton(0, coupLbl, false, WHITE);
+    
+
+    // TASTO 2: Sonda
+    drawMenuButton(2, probLbl, false, WHITE);
+    
+    // TASTO 3: Inversione (Usiamo il campo della struct)
+    drawMenuButton(3, ch->inverted ? "-INV-" : "INVERT", ch->inverted, WHITE);
+    
+    // TASTO 4: Posizione (Indichiamo quale canale stiamo muovendo col suo colore!)
+    drawMenuButton(4, "POSITION", ch->focused, ch->color);
+}
     else if (currentMenu == MENU_TRIG) {
         drawMenuButton(0, (trigger_mode == 0) ? "AUTO" : "NORMAL", true, WHITE);
         drawMenuButton(1, trigger_slope ? "RISE" : "FALL", false, WHITE);
         drawMenuButton(2, (trigger_source == 1) ? "CH1" : "CH2", false, WHITE);
         //drawMenuButton(3, (encoderMode == MODE_TRIG_LEVEL) ? "> LEV <" : "LEVEL", false, WHITE);
         //drawMenuButton(4, "BACK", false, WHITE);
-    }
-
+    }*/
+    updateSidebarLabels(); // Aggiorna tutte le etichette in base allo stato attuale (usa i dati nelle struct)
     // 6. Ripristina la griglia
     tft_drawGrid(LIGHTGREY);
 }
 
-void toggleCH(uint8_t ch) 
+/*void toggleCH(uint8_t ch) 
 {
     // ch: 1 per CH1, 2 per CH2
     uint8_t idx = ch - 1;
@@ -561,10 +609,10 @@ void toggleCH(uint8_t ch)
     // 3. Aggiorna la sidebar per riflettere il nuovo stato
     // Questa funzione userà internamente ch_visible[idx] per scrivere "ON" o "OFF"
     updateSidebarLabels(); 
-}
+}*/
 
 
-void cycleCoupling(uint8_t ch) 
+/*void cycleCoupling(uint8_t ch) 
 {
     // ch deve essere 1 per CH1 e 2 per CH2
     uint8_t idx = ch - 1; 
@@ -594,66 +642,123 @@ void cycleCoupling(uint8_t ch)
     // Ridisegna il bottone (il tasto 9 corrisponde all'indice 1 della sidebar)
     // Ora passiamo correttamente label, stato active e colore
     drawMenuButton(1, label, true, color); 
-}
-
-
-void aggiornaMoltiplicatoreSonda(uint8_t ch, uint8_t probe_idx) 
+}*/
+void cycleCoupling(Channel *ch) 
 {
-    uint8_t idx = ch - 1;
-
-    // Impostiamo il moltiplicatore in base all'indice (0=1X, 1=10X, 2=100X)
-    switch(probe_idx) {
-        case 0: // 1X
-            ch_multiplier[idx] = 1.0;
-            break;
-        case 1: // 10X
-            ch_multiplier[idx] = 10.0;
-            break;
-        case 2: // 100X
-            ch_multiplier[idx] = 100.0;
-            break;
-    }
-}
-
-void cycleProbe(uint8_t ch) 
-{
-    // Indice array (0 per CH1, 1 per CH2)
-    uint8_t idx = ch - 1; 
-
-    // 1. Cicla tra le tre impostazioni
-    ch_probe[idx]++;
-    if (ch_probe[idx] > 2) {
-        ch_probe[idx] = 0;
+    // 1. Cicla tra 0, 1 e 2 direttamente nella struct del canale
+    // Usiamo le tue costanti (COUPL_DC, COUPL_AC, COUPL_GND)
+    ch->coupling++;
+    if (ch->coupling > COUPL_GND) {
+        ch->coupling = COUPL_DC;
     }
 
-    // 2. Logica di calcolo
-    aggiornaMoltiplicatoreSonda(ch, ch_probe[idx]);
+    // 2. Comunicazione Hardware (VHDL/FPGA)
+    // Se serve l'indice 1 o 2 per l'hardware:
+    // uint8_t chNum = (ch == &ch1) ? 1 : 2;
+    // inviaComandoHardware(chNum, ch->coupling);
 
     // 3. Preparazione etichetta
     const char* label;
-    switch(ch_probe[idx]) {
-        case 0:  label = "1X  ";   break;
-        case 1:  label = "10X ";  break;
-        case 2:  label = "100X"; break;
-        default: label = "??";   break;
+    switch(ch->coupling) {
+        case COUPL_DC:  label = "DC ";  break;
+        case COUPL_AC:  label = "AC ";  break;
+        case COUPL_GND: label = "GND";  break;
+        default:        label = "??";   break;
     }
     
-    // 4. Aggiornamento grafico con il COLORE corretto
-    // Determiniamo il colore in base al canale (ch 1 = YELLOW, ch 2 = CYAN)
-    //uint16_t color = (ch == 1) ? YELLOW : CYAN;
-    uint16_t color = WHITE;
-    // Il tasto fisico 6 (ev 6) corrisponde al terzo bottone (indice 2)
-    drawMenuButton(2, label, true, color); 
+    // 4. Feedback visivo
+    // Usiamo il colore contenuto nella struct (YELLOW o CYAN/BLUE)
+    // per far capire subito all'utente su quale canale sta agendo.
+    //uint16_t color = ch->color; 
+
+    // Ridisegna il bottone (indice 1 della sidebar)
+    // Passiamo la label, true per indicare che è "attivo" e il colore del canale
+    drawMenuButton(0, label, true, WHITE); 
 }
 
-float calcolaVoltReali(uint8_t ch, uint8_t valoreADC) {
-    uint8_t idx = ch - 1;
+void toggleBWLimit(Channel *ch) 
+{
+    // 1. Inverte lo stato del filtro (0 o 1)
+    ch->bw_limit = !ch->bw_limit;
+
+    // 2. Comunicazione Hardware (Fondamentale!)
+    // Il BW Limit nei veri oscilloscopi attiva un filtro passa-basso analogico o digitale.
+    // Se la tua FPGA o il tuo front-end lo supportano:
+    // uint8_t chNum = (ch == &ch1) ? 1 : 2;
+    // set_fpga_bw_filter(chNum, ch->bw_limit);
+
+    // 3. Preparazione etichetta per il menu
+    // "Full" significa banda passante massima, "20M" è il limite standard
+    const char* label = ch->bw_limit ? "20MHz" : "FULL ";
     
-    // 1. Converti il valore ADC (0-255) in tensione basandoti sul tuo riferimento (es. 5V)
-    float v_letta = (valoreADC * 5.0) / 255.0;
+    // 4. Feedback visivo
+    // Usiamo il colore del canale per evidenziare quando il filtro è attivo
+    //uint16_t color = ch->bw_limit ? ch->color : WHITE;
+
+    // Supponiamo di usare il tasto 4 della sidebar per il BW Limit
+    drawMenuButton(1, label, ch->bw_limit, WHITE); 
+}
+
+
+
+
+void aggiornaMoltiplicatoreSonda(Channel *ch) 
+{
+    // Usiamo direttamente ch->probe (che è già stato aggiornato da cycleProbe)
+    // per impostare il moltiplicatore interno alla struct
+    switch(ch->probe) {
+        case 0: // 1X
+            ch->multiplier = 1.0f;
+            break;
+        case 1: // 10X
+            ch->multiplier = 10.0f;
+            break;
+        case 2: // 100X
+            ch->multiplier = 100.0f;
+            break;
+        default:
+            ch->multiplier = 1.0f;
+            break;
+    }
+}
+
+void cycleProbe(Channel *ch) 
+{
+    // 1. Cicla tra le tre impostazioni direttamente nella struct (0=1X, 1=10X, 2=100X)
+    ch->probe++;
+    if (ch->probe > 2) {
+        ch->probe = 0;
+    }
+
+    // 2. Logica di calcolo
+    // Passiamo il puntatore così la funzione sa già tutto quello che serve
+    aggiornaMoltiplicatoreSonda(ch);
+
+    // 3. Preparazione etichetta
+    const char* label;
+    switch(ch->probe) {
+        case 0:  label = "1X  "; break;
+        case 1:  label = "10X "; break;
+        case 2:  label = "100X"; break;
+        default: label = "??  "; break;
+    }
     
-    // 2. Applica il moltiplicatore della sonda
-    return v_letta * ch_multiplier[idx];
+    // 4. Aggiornamento grafico con il colore del canale
+    // Usiamo ch->color così se sei nel menu CH1 è Giallo, se CH2 è Ciano
+    //uint16_t color = ch->color;
+
+    // Disegniamo il bottone (indice 2 della sidebar per il tasto Probe)
+    drawMenuButton(3, label, true, WHITE); 
+}
+
+float calcolaVoltReali(Channel *ch, uint16_t valoreADC) {
+    // 1. Converti il valore ADC (0-4095) in tensione.
+    // Supponendo che il range di ingresso dell'ADC sia 5V (o quello del tuo front-end)
+    // Usiamo 4095.0f per forzare il calcolo in virgola mobile.
+    float v_letta = (valoreADC * 5.0f) / 4095.0f;
+    
+    // 2. Applica il moltiplicatore della sonda (1X, 10X, 100X) contenuto nella struct
+    return v_letta * ch->multiplier;
 }
 
 
@@ -697,7 +802,7 @@ void updateSidebarLabels() {
     tft_printAt(menuTitle, 425, 5, menuColor, DARKGREY);
 
     // --- 2. LOGICA TASTI SIDEBAR ---
-    if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
+    /*if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
         uint8_t chIdx = (currentMenu == MENU_CH1) ? 0 : 1;
 
         // TASTO 0: Stato ON/OFF
@@ -720,7 +825,34 @@ void updateSidebarLabels() {
 
         // TASTO 4: Posizione Y (Visualizziamo se l'encoder la sta controllando)
         //drawMenuButton(4, (encoderMode == MODE_Y_POS) ? "> POS <" : "POSITION", (encoderMode == MODE_Y_POS), WHITE);
-    } 
+    } */
+
+    if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
+        // 1. Puntatore al canale basato sul menu aperto
+        Channel *ch = (currentMenu == MENU_CH1) ? &ch1 : &ch2;
+        const char* chName = (currentMenu == MENU_CH1) ? "CH1" : "CH2";
+
+        // TASTO 0: Accoppiamento (Aggiungi 'coupling' alla struct!)
+        // 0: DC, 1: AC, 2: GND
+        const char* couplLabels[] = {"DC", "AC", "GND"};
+        drawMenuButton(0, couplLabels[ch->coupling], true, WHITE);
+
+        // TASTO 1: Limite banda (Non implementato, mettiamo un placeholder)
+        drawMenuButton(1, "BW: 20MHz", false, WHITE);
+
+        // TASTO 2: Volt/div (Focus sull'encoder, ma mostriamo anche il moltiplicatore della sonda)
+        char vdivLabel[10];
+        sprintf(vdivLabel, "V/DIV: %.1f", ch->volts_div);
+        drawMenuButton(2, vdivLabel, false, WHITE);
+
+        // TASTO 3: Sonda (Aggiungi 'probe' alla struct!)
+        const char* probeLabels[] = {"1X", "10X", "100X"};
+        drawMenuButton(3, probeLabels[ch->probe], true, WHITE);
+
+        // TASTO 3: Inversione (Usiamo ch->inverted)
+        drawMenuButton(4, ch->inverted ? "-INV-" : "INVERT", ch->inverted, WHITE);
+
+    }
     
     else if (currentMenu == MENU_TRIG) {
         // TASTO 0: Modalità (AUTO/NORMAL) - Usiamo i nuovi nomi
@@ -759,7 +891,7 @@ void updateSidebarLabels() {
     }
 }
 
-void toggleInvert(uint8_t ch) 
+/*void toggleInvert(uint8_t ch) 
 {
     // Indice array (0 per CH1, 1 per CH2)
     uint8_t idx = ch - 1; 
@@ -781,6 +913,27 @@ void toggleInvert(uint8_t ch)
     uint16_t color = WHITE;
     // Il tasto fisico 3 (ev 3) corrisponde al quarto bottone (indice 3)
     drawMenuButton(3, label, ch_inverted[idx], color); 
+}*/
+void toggleInvert(Channel *ch) 
+{
+    // 1. Inverte lo stato booleano direttamente nella struct
+    ch->inverted = !ch->inverted;
+
+    // 2. Comunicazione Hardware (Opzionale)
+    // Se la tua FPGA ha un registro per l'inversione hardware:
+    // set_fpga_inversion(ch == &ch1 ? 0 : 1, ch->inverted);
+
+    // 3. Preparazione etichetta
+    const char* label = ch->inverted ? "-INV-" : "INVERT";
+    
+    // 4. Feedback visivo
+    // Usiamo il colore del canale per il tasto se è attivo, 
+    // così l'utente ha un feedback immediato (Stile Tektronix)
+    //uint16_t buttonColor = ch->inverted ? ch->color : WHITE;
+
+    // Disegniamo il pulsante (Tasto 3 nel menu)
+    drawMenuButton(4, label, ch->inverted, WHITE); 
+
 }
 
 int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
@@ -809,7 +962,7 @@ int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
     // 3. Calcolo della coordinata Y
     // yCenter è il centro della tua griglia (es. 120 + MARGIN_Y)
     // Sottraiamo perché sul display l'asse Y è invertito (0 è in alto)
-    int16_t y_pixel = y_offset_ch[trigger_source - 1] - (int16_t)(sample * scale_factor);
+    int16_t y_pixel = ch1.offset - (int16_t)(sample * scale_factor);
 
     // 4. Clipping di sicurezza per non uscire dalla griglia
     if (y_pixel < MARGIN_Y) return MARGIN_Y;
@@ -874,7 +1027,7 @@ float read_fpga_frequency() {
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     // 1. Portiamo a 8 bit (0-255)
     uint8_t raw_data = level12 >> 4; 
-
+    Channel *trig_ch = (trigger_source == 1) ? &ch1 : &ch2;
     // 2. Applichiamo la STESSA inversione della traccia
     // Se la traccia è invertita (inverted=false nel draw_trace), facciamo 255 - raw_data
     // Supponiamo che 'inverted' qui segua la stessa logica del canale selezionato
@@ -885,7 +1038,8 @@ void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
 
     // 3. Calcolo coordinata Y reale (IDENTICO alla draw_trace)
     // Usiamo y_offset_ch che passi alla draw_trace
-    int16_t y = (int16_t)(raw_data / 2) + y_offset_ch[trigger_source - 1];
+    //int16_t y = (int16_t)(raw_data / 2) + y_offset_ch[trigger_source - 1];
+    int16_t y = (int16_t)(raw_data / 2) + trig_ch->offset;
 
     // 4. CANCELLAZIONE
     if (last_trig_y >= MARGIN_Y && last_trig_y <= (MARGIN_Y + TRACE_H)) {
@@ -927,6 +1081,35 @@ ui_status_t get_system_status_code(void) {
     return UI_STATUS_RUN;
 }
 
+void draw_channel_status(Channel *ch, uint16_t xPos, uint16_t yPos, bool force) {
+    // Controllo se qualcosa è cambiato o se è richiesto il refresh forzato
+    if(ch->old_vdiv_idx != ch->vdiv_idx || ch->old_coupling != ch->coupling || force) {
+        
+        // Pulizia area (100px larghezza, 16px altezza)
+        tft_fillRect(xPos, yPos, 100, 16, BLACK);
+        
+        // Colore del canale (Giallo per CH1, Ciano per CH2)
+        setTextColor(ch->color, BLACK);
+        tft_set_cursor(xPos, yPos);
+        
+        // Stampa Etichetta (CH1 o CH2 basandosi sull'indirizzo di memoria)
+        tft_Print(ch == &ch1 ? "CH1: " : "CH2: ");
+        
+        // Stampa Valore V/div
+        tft_Print(v_div_labels[ch->vdiv_idx]); 
+        tft_Print(" ");
+        
+        // Stampa Accoppiamento
+        // Usiamo un controllo semplice o l'array delle labels
+        tft_Print(ch->coupling == COUPL_AC ? "AC" : 
+                  ch->coupling == COUPL_GND ? "GND" : "DC");
+
+        // Aggiorniamo i vecchi valori
+        ch->old_vdiv_idx = ch->vdiv_idx;
+        ch->old_coupling = ch->coupling;
+    }
+}
+
 void update_status_bar(bool force) {
     uint16_t yPos = MARGIN_Y + TRACE_H + 10;
     uint16_t xStart = MARGIN_X;
@@ -949,12 +1132,12 @@ void update_status_bar(bool force) {
 
         // Qui disegni sul TFT (avviene solo una volta per ogni cambio di stato)
         // tft_draw_status(label, color); 
-        tft_printAt(label, 10, 5, color, DARKGREY);
+        tft_printAt(label, 100, 5, color, DARKGREY);
         last_ui_state = current_state;
     }
 
     // --- CANALE 1 ---
-    if(old_ch1_vdiv_idx != ch1_vdiv_idx || old_ch_coupling[0] != ch_coupling[0] || force){
+   /* if(old_ch1_vdiv_idx != ch1_vdiv_idx || old_ch_coupling[0] != ch_coupling[0] || force){
         tft_fillRect(xStart, yPos, 100, 16, BLACK);
         setTextColor(CYAN, BLACK);
         tft_set_cursor(xStart, yPos);
@@ -977,7 +1160,13 @@ void update_status_bar(bool force) {
         tft_Print(ch_coupling[1] ? "AC" : "DC");
         old_ch2_vdiv_idx = ch2_vdiv_idx;
         old_ch_coupling[1] = ch_coupling[1];
-    }
+    }*/
+
+    // Aggiorna info CH1
+    draw_channel_status(&ch1, xStart, yPos, force);
+
+    // Aggiorna info CH2 (spostato di 100 pixel a destra)
+    draw_channel_status(&ch2, xStart + 100, yPos, force);
 
     // --- BASE TEMPI ---
     if(old_current_time_base_idx != current_time_base_idx || force){
@@ -1022,31 +1211,6 @@ void update_status_bar(bool force) {
         }
     }
 }
-
-
-
-// Valori di default per gli encoder (minimo, massimo step, valore iniziale)
-#define OFFSET_Y_MIN -50
-#define OFFSET_Y_MAX 250
-#define OFFSET_Y_STEP 2
-#define OFFSET_Y1_C_VAL 120
-#define OFFSET_Y2_C_VAL 120
-
-#define VDIVCH_MIN 1
-#define VDIVCH_MAX 10
-#define VDIVCH_STEP 1
-#define VDIVCH_C_VAL 5
-
-#define TDIV_MIN 0
-#define TDIV_MAX 16
-#define TDIV_STEP 1
-#define TDIV_C_VAL 11
-
-#define TRIG_MIN 0
-#define TRIG_MAX 4095
-#define TRIG_STEP 64
-#define TRIG_C_VAL 2048
-
 
 void write_encoder(uint8_t encoder_idx, int16_t value) {
     switch (encoder_idx) {
@@ -1121,27 +1285,90 @@ void conf_encoder() {
 
 }
 
-/************************************************************************************/
-/*                                 KEY MAP                                          */
-/*          ROW0            ROW1        ROW2                                        */
-/*      12 context       13 CH1       14 CH2                                        */
-/*       9 context       10 TRIG      11 T/Div                                      */
-/*       6 context        7 PAN        8 RUN/STOP                                   */
-/*       3 context        4            5 SINGLE                                     */
-/*       0 context        1            2                                            */
-/********************************************************************************** */
+
+
+void handle_channel_button(uint8_t channel_num) {
+    Channel *current = (channel_num == 1) ? &ch1 : &ch2;
+    Channel *other   = (channel_num == 1) ? &ch2 : &ch1;
+    uint8_t menu = (channel_num == 1) ? MENU_CH1 : MENU_CH2;
+    // ch: 1 per CH1, 2 per CH2
+    uint8_t idx = channel_num - 1;
+
+    if (!current->enabled) {
+        // CASO 1: Canale spento -> Accendi e dai focus
+        current->enabled = 1;
+        current->focused = 1;
+        other->focused = 0;
+        currentMenu = menu;
+
+        
+    } 
+    else if (current->enabled && !current->focused) {
+        // CASO 2: Acceso ma non a fuoco -> Sposta il focus qui
+        current->focused = 1;
+        other->focused = 0;
+        currentMenu = menu;
+
+    } 
+    else {
+        // CASO 3: Già a fuoco e acceso -> Spegni tutto
+        current->enabled = 0;
+        current->focused = 0;
+        // 2. Se stiamo spegnendo il canale, puliamo lo schermo dai "fantasmi"
+
+    for (uint16_t i = 0; i < 400; i++) {
+        // Calcoliamo la X aggiungendo il margine (5)
+        // Cancelliamo il pixel usando la Y memorizzata nel buffer vecchio
+        tft_drawPixel(i + MARGIN_X, buffers_vecchi[idx][i], BLACK);
+    }
+    
+        //close_menu();
+    }
+    
+    // Forza il ridisegno dell'interfaccia grafica
+    updateSidebarLabels();
+}
+
+void init_channels() {
+    // CH1 Default
+    ch1.enabled = 1;
+    ch1.focused = 1;
+    ch1.volts_div = 1.0;
+    ch1.offset = 60; 
+    ch1.coupling = COUPL_DC; // Aggiunto accoppiamento di default
+    ch1.probe = 0; // Sonda 1X di default
+    ch1.inverted = false; // Non invertito di default
+    ch1.vdiv_idx = 6; // Indice per 1V/div
+    ch1.color = YELLOW;
+    
+    // CH2 Default
+    ch2.enabled = 0;
+    ch2.focused = 0;
+    ch2.volts_div = 1.0;
+    ch2.offset = 60; 
+    ch2.coupling = COUPL_DC; // Aggiunto accoppiamento di default
+    ch2.probe = 0; // Sonda 1X di default
+    ch2.inverted = false; // Non invertito di default
+    ch2.vdiv_idx = 6; // Indice per 1V/div
+    ch2.color = CYAN;
+}
+
 // --- main loop ---
 void scope_main(void)
 {
     uint8_t key, rep;
     uint8_t new_sel;
     uint16_t new_trigger_level;
+    
+    init_channels();
     conf_encoder();
     drawStaticInterface();
     update_status_bar(true);
     set_base_time(11);
     set_trigger_level(trigger_level_12bit);   
     set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
+
+
    while(1)
     {
         pan_flag = false;
@@ -1198,21 +1425,19 @@ void scope_main(void)
                     update_status_bar(true);
                     break;
 
-                case KEY_TRIGGER: // Ipotetico tasto fisico "Trigger"
+                case KEY_TRIGGER: // Tasto fisico "Trigger"
                     currentMenu = MENU_TRIG;
-                    updateSidebarLabels(); // Ridisegna etichette 
+                    updateSidebarLabels(); 
                     break;
                 case 21: // Ipotetico tasto fisico "T/Div"
                     currentMenu = MENU_TBASE;
-                    updateSidebarLabels(); // Ridisegna etichette 
+                    updateSidebarLabels(); 
                     break;
-                case KEY_CH1: // Ipotetico tasto fisico "Vertical CH1"
-                    currentMenu = MENU_CH1;
-                    updateSidebarLabels(); // Ridisegna etichette 
+                case KEY_CH1: // Tasto fisico "Vertical CH1"
+                    handle_channel_button(1);
                     break;
-                case KEY_CH2: // Ipotetico tasto fisico "Vertical CH2"
-                    currentMenu = MENU_CH2;
-                    updateSidebarLabels(); // Ridisegna etichette 
+                case KEY_CH2: // Tasto fisico "Vertical CH2"
+                    handle_channel_button(2);
                     break;
                 case 15: // Tasto encoder per la posizione verticale (Y-POS)
                     write_encoder(0, OFFSET_Y1_C_VAL); // Reset posizione Y CH1 
@@ -1231,47 +1456,45 @@ void scope_main(void)
                 case MENU_CH1:
                     switch (ev) {
                         case 12: // Tasto 1 
-                            toggleCH(1);
+                            cycleCoupling(&ch1);
                             break;
 
                         case 9:  // Tasto 2 
-                            cycleCoupling(1);
+                            toggleBWLimit(&ch1);
                             break;
-
                         case 6:  // Tasto 3 
-                            cycleProbe(1);
+                            //cycleVoltDiv(&ch2);
+                            break;
+                        case 3:  // Tasto 3 
+                            cycleProbe(&ch1);
                             break;
 
-                        case 3:  // Tasto 4 
-                            toggleInvert(1);
+                        case 0:  // Tasto 4 
+                            toggleInvert(&ch1);
                             break;
 
-                        case 0:  // Tasto 5 (Bottom) -> EXIT
-                            //toggleYPosMode(1);
-                            break;
                     }
                     break;
                 case MENU_CH2:
                     switch (ev) {
                         case 12: // Tasto 1 
-                            toggleCH(2);
+                            cycleCoupling(&ch2);
                             break;
 
                         case 9:  // Tasto 2 
-                            cycleCoupling(2);
+                            toggleBWLimit(&ch2);
                             break;
-
                         case 6:  // Tasto 3 
-                            cycleProbe(2);
+                            //cycleVoltDiv(&ch2);
+                            break;
+                        case 3:  // Tasto 3 
+                            cycleProbe(&ch2);
                             break;
 
-                        case 3:  // Tasto 4 
-                            toggleInvert(2);
+                        case 0:  // Tasto 4 
+                            toggleInvert(&ch2);
                             break;
 
-                        case 0:  // Tasto 5 (Bottom) -> EXIT
-                            //(2);
-                            break;
                     }
                     break;
                 case MENU_TRIG:
@@ -1324,6 +1547,9 @@ void scope_main(void)
         time_div_sel = new_sel; // aggiorna il valore corrente
         time_div_sel_changed = true;
         current_time_base_idx =time_div_sel;
+        freeze = false;     // Fondamentale: permette a osc_read_triggered di armare
+                    is_running = true;  // Ci assicuriamo che il loop chiami l'acquisizione
+                    REG_TRIG = 0x01;    // Armiamo la FSM FPGA
         updateSidebarLabels(); 
     }
 
@@ -1352,11 +1578,13 @@ void scope_main(void)
         uart_print("\r\n");*/
     }
 
-    y_offset_ch[0] = encoder_values[0]; // Aggiorna posizione Y CH1
-    y_offset_ch[1] = encoder_values[2]; // Aggiorna posizione Y CH2
+    ch1.offset = encoder_values[0]; // Aggiorna posizione Y CH1
+    ch2.offset = encoder_values[2]; //
+    //y_offset_ch[0] = encoder_values[0]; // Aggiorna posizione Y CH1
+    //y_offset_ch[1] = encoder_values[2]; // Aggiorna posizione Y CH2
 
-    ch1_vdiv_idx = encoder_values[1]; // Aggiorna Volt/Div CH1
-    ch2_vdiv_idx = encoder_values[3]; // Aggiorna Volt/Div
+    ch1.vdiv_idx = encoder_values[1]; // Aggiorna Volt/Div CH1
+    ch2.vdiv_idx = encoder_values[3]; // Aggiorna Volt/Div
 
     acquire_and_draw();
     update_status_bar(false);

@@ -845,10 +845,10 @@ void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t
     textsize = 1; // Dimensione standard per i piccoli testi del DSO
 
     while (*str) {
-        // Usiamo la tua funzione!
+        
         // uniCode è il carattere attuale (*str)
         // font = 1 (quello che abbiamo adattato prima)
-        curX += tft_drawChar((unsigned int)*str++, curX, y, 1);
+        curX += tft_drawChar((unsigned int)*str++, curX, y, 2);
         
         // Protezione margine destro
         if (curX > _width - 5) break;
