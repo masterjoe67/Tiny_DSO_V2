@@ -2,6 +2,7 @@
 #include <util/delay.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <avr/pgmspace.h>
 #include "st7798.h"
 #include "Font16.h"
@@ -833,7 +834,7 @@ void tft_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
 ** Function name:           tft_printAt
 ** Description:             Stampa una stringa usando la tua tft_drawChar
 ***************************************************************************************/
-void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t bg) {
+void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t bg, uint8_t font) {
     // Nota: Ho rimosso il parametro font dalla chiamata esterna per semplicità,
     // forzando il font 1 (GLCD) o quello che preferisci per la UI.
     int16_t curX = x;
@@ -848,11 +849,46 @@ void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t
         
         // uniCode è il carattere attuale (*str)
         // font = 1 (quello che abbiamo adattato prima)
-        curX += tft_drawChar((unsigned int)*str++, curX, y, 2);
+        curX += tft_drawChar((unsigned int)*str++, curX, y, font);
         
         // Protezione margine destro
         if (curX > _width - 5) break;
     }
+}
+
+/***************************************************************************************
+** Function name:           tft_printCenteredX
+** Description:             Stampa una stringa centrata orizzontalmente in un'area
+** delimitata da xStart e xEnd alla coordinata Y specificata.
+***************************************************************************************/
+void tft_printCenteredX(const char *str, int16_t xStart, int16_t xEnd, int16_t y, uint16_t color, uint16_t bg, uint8_t font) {
+    uint16_t textWidth = 0;
+    uint16_t len = strlen(str);
+    
+    if (len == 0) return; // Evitiamo calcoli inutili
+
+    if (font == 2) {
+        #ifdef LOAD_FONT2
+        for (uint16_t i = 0; i < len; i++) {
+            uint8_t uniCode = str[i];
+            // Sommiamo la larghezza del carattere + 1 pixel di spazio
+            textWidth += pgm_read_byte(widtbl_f16 + uniCode) + 1;
+        }
+        // Togliamo l'ultimo pixel di spazio aggiunto in eccesso dopo l'ultima lettera
+        textWidth--; 
+        #endif
+    } else {
+        // Per il Font 1, di solito è 6 pixel totali (5 carattere + 1 spazio)
+        textWidth = (len * 6 * font) - 1; 
+    }
+
+    int16_t areaWidth = xEnd - xStart;
+    int16_t centeredX = xStart + (areaWidth - textWidth) / 2;
+
+    // Se il calcolo porta il testo fuori a sinistra, forziamo l'inizio all'area
+    if (centeredX < xStart) centeredX = xStart;
+
+    tft_printAt(str, centeredX, y, color, bg, font);
 }
 
 void tft_print_int(int32_t num) {

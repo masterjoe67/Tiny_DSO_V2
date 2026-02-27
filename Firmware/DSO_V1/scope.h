@@ -87,6 +87,8 @@
 #define TRIG_C_VAL 2048
 
 #define MAX_TIMEBASE_IDX 18
+#define MAX_VDIV_IDX 9
+
 
 extern uint16_t _width;
 extern uint16_t _height;
@@ -110,6 +112,7 @@ typedef struct {
     uint8_t probe;       // Tipo di sonda (1X, 10X, 100X)
     uint8_t bw_limit;  // 0: Full BW, 1: 20MHz Limit
     float multiplier;    // Fattore di moltiplicazione per calcolare la tensione reale
+    uint8_t isFine;
     uint16_t old_offset;
     uint16_t color;        // Colore della traccia
     Point_t gnd_mark_a;
@@ -119,7 +122,7 @@ typedef struct {
     
 } Channel;
 
-Channel ch1, ch2;
+
 
 typedef enum {
     UI_STATUS_STOP = 0,
