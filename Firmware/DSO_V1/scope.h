@@ -71,10 +71,10 @@
 #define OFFSET_Y_MAX 250
 #define OFFSET_Y_STEP 2
 #define OFFSET_Y1_C_VAL 120
-#define OFFSET_Y2_C_VAL 120
+#define OFFSET_Y2_C_VAL 145
 
-#define VDIVCH_MIN 1
-#define VDIVCH_MAX 10
+#define VDIVCH_MIN 0
+#define VDIVCH_MAX 9
 #define VDIVCH_STEP 1
 #define VDIVCH_C_VAL 5
 
@@ -113,6 +113,7 @@ typedef struct {
     uint8_t enabled;      // 0 = Spento, 1 = Acceso
     uint8_t focused;      // 1 = Il menu attuale è dedicato a questo canale
     float volts_div;      // Scala verticale
+    float old_volts_div;  // Per rilevare cambiamenti e aggiornare a schermo
     int16_t offset;       // Posizione verticale sullo schermo
     uint8_t inverted;     // 0 = Normale, 1 = Invertito
     uint8_t coupling; // Tipo di accoppiamento (DC, AC, GND)

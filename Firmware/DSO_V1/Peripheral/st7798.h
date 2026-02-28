@@ -114,7 +114,9 @@ void tft_printAt(const char *str, int16_t x, int16_t y, uint16_t color, uint16_t
 void tft_printCenteredX(const char *str, int16_t xStart, int16_t xEnd, int16_t y, uint16_t color, uint16_t bg, uint8_t font);
 void tft_print_int(int32_t num);
 void tft_print_float(float value, uint8_t decimals);
+void tft_Print_int16(int16_t value);
 void tft_set_backlight(uint8_t level);
+void tft_drawLine_Clipped(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color, uint16_t y_min, uint16_t y_max);
 
 
 #endif

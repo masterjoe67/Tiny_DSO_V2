@@ -1,6 +1,8 @@
 #include <stdint.h>
+#include <stdlib.h>
 #include <util/delay.h>
 #include <stdbool.h>
+#include <math.h>
 #include "Peripheral/st7798.h"
 #include "Peripheral/input.h"
 #include "Peripheral/uart.h"
@@ -157,7 +159,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
         // --- GESTIONE CANALE A ---
         // Cancellazione vecchia traccia A
         if (old_buf_a[i] > Y_MIN && old_buf_a[i] < Y_MAX) {
-            if (vectors && i > 0 && y_prev_old_a > Y_MIN) tft_drawLine(x-1, y_prev_old_a, x, old_buf_a[i], BLACK);
+            if (vectors && i > 0 && y_prev_old_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX);
             else tft_drawPixel(x, old_buf_a[i], BLACK);
         }
         y_prev_old_a = old_buf_a[i];
@@ -167,7 +169,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
             uint16_t val_a = (a_h << 8) | a_l;
             int16_t y_now_a = calcolaYTraccia(ch_a, val_a);
             if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
-                if (vectors && i > 0 && y_prev_new_a > Y_MIN) tft_drawLine(x-1, y_prev_new_a, x, y_now_a, ch_a->color);
+                if (vectors && i > 0 && y_prev_new_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_a, ch_a->color);
             }
             y_prev_new_a = y_now_a;
@@ -177,7 +179,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
         // --- GESTIONE CANALE B ---
         // Cancellazione vecchia traccia B
         if (old_buf_b[i] > Y_MIN && old_buf_b[i] < Y_MAX) {
-            if (vectors && i > 0 && y_prev_old_b > Y_MIN) tft_drawLine(x-1, y_prev_old_b, x, old_buf_b[i], BLACK);
+            if (vectors && i > 0 && y_prev_old_b > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_old_b, x, old_buf_b[i], BLACK, Y_MIN, Y_MAX);
             else tft_drawPixel(x, old_buf_b[i], BLACK);
         }
         y_prev_old_b = old_buf_b[i];
@@ -187,7 +189,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
             uint16_t val_b = (b_h << 8) | b_l;
             int16_t y_now_b = calcolaYTraccia(ch_b, val_b);
             if (y_now_b > Y_MIN && y_now_b < Y_MAX) {
-                if (vectors && i > 0 && y_prev_new_b > Y_MIN) tft_drawLine(x-1, y_prev_new_b, x, y_now_b, ch_b->color);
+                if (vectors && i > 0 && y_prev_new_b > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_b, x, y_now_b, ch_b->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_b, ch_b->color);
             }
             y_prev_new_b = y_now_b;
@@ -418,7 +420,7 @@ void acquire_and_draw(){
 
     
     // UI e Marker (Sempre visibili per poterli muovere in STOP)
-    draw_trigger_line(trigger_level_12bit, YELLOW, false);
+    draw_trigger_line(trigger_level_12bit, ORANGE, false);
     draw_ground_marker(&ch1);
     draw_ground_marker(&ch2);
     drawPanTrack();
@@ -694,6 +696,56 @@ void updateSidebarLabels() {
 }
 
 
+
+void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
+    ch->isFine = !ch->isFine;
+
+    // Determiniamo quale encoder usare: 1 per CH1, 3 per CH2
+    // Assumendo che ch1 e ch2 siano le tue istanze globali
+    uint8_t enc_id = (ch == &ch1) ? 1 : 3;
+
+    if (ch->isFine) {
+        // --- DA COARSE A FINE ---
+        int16_t current_units = (int16_t)(ch->volts_div * 100.0f);
+
+        uart_print("CH ");
+        uart_print_int16(enc_id);
+        uart_print(" - Fine Mode - Units: ");
+        uart_print_int16(current_units);
+        uart_print("\r\n");
+
+        configure_encoder(enc_id, PARAM_MIN, 1);    // 0.01V
+        configure_encoder(enc_id, PARAM_MAX, 1000); // 10.0V
+        configure_encoder(enc_id, PARAM_STEP, 1);
+        configure_encoder(enc_id, PARAM_C_VAL, current_units);
+        
+        *last_enc = current_units; 
+    }
+    else {
+        // --- RITORNO A COARSE ---
+        float min_diff = 100.0f;
+        for (uint8_t i = 0; i < 10; i++) {
+            float diff = fabs(ch->volts_div - v_div_values[i]);
+            if (diff < min_diff) {
+                min_diff = diff;
+                ch->vdiv_idx = i;
+            }
+        }
+        ch->volts_div = v_div_values[ch->vdiv_idx];
+
+        configure_encoder(enc_id, PARAM_MIN, VDIVCH_MIN);
+        configure_encoder(enc_id, PARAM_MAX, VDIVCH_MAX);
+        configure_encoder(enc_id, PARAM_STEP, 1);
+        configure_encoder(enc_id, PARAM_C_VAL, ch->vdiv_idx);
+        
+        *last_enc = ch->vdiv_idx;
+    }
+
+    // Aggiorna interfaccia (usando l'indice corretto del tasto, qui 2)
+    drawMenuButton(2, "V/DIV", ch->isFine ? "FINE" : "COARSE", ch->isFine, WHITE);
+}
+
+
 void toggleInvert(Channel *ch) 
 {
     // 1. Inverte lo stato booleano direttamente nella struct
@@ -714,41 +766,6 @@ void toggleInvert(Channel *ch)
     // Disegniamo il pulsante (Tasto 3 nel menu)
     drawMenuButton(4, "Invert", label, ch->inverted, WHITE); 
 
-}
-
-int16_t scale_8bit_to_pixel(uint8_t raw_8bit, uint8_t vdiv_idx) {
-    // 1. Centriamo il campione (0-255) rispetto allo zero virtuale (128)
-    // Usiamo un int16 per gestire i valori negativi
-    int16_t sample = (int16_t)raw_8bit - 128;
-
-    // 2. Tabella dei fattori di scala
-    // Se a 1V/div (idx 6) vogliamo che una divisione (30px) sia, ad esempio, 50 unità ADC
-    // allora moltiplichiamo per un fattore che adatti il segnale.
-    
-    float scale_factor = 1.0f;
-    switch(vdiv_idx) {
-        case 0: scale_factor = 10.0f; break; // 10mV - Molto zoomato
-        case 1: scale_factor = 5.0f;  break; // 20mV
-        case 2: scale_factor = 2.0f;  break; // 50mV
-        case 3: scale_factor = 1.0f;  break; // 100mV
-        case 4: scale_factor = 0.5f;  break; // 200mV
-        case 5: scale_factor = 0.2f;  break; // 500mV
-        case 6: scale_factor = 0.1f;  break; // 1V - Rimpicciolito
-        case 7: scale_factor = 0.05f; break; // 2V
-        case 8: scale_factor = 0.02f; break; // 5V
-        case 9: scale_factor = 0.01f; break; // 10V
-    }
-
-    // 3. Calcolo della coordinata Y
-    // yCenter è il centro della tua griglia (es. 120 + MARGIN_Y)
-    // Sottraiamo perché sul display l'asse Y è invertito (0 è in alto)
-    int16_t y_pixel = ch1.offset - (int16_t)(sample * scale_factor);
-
-    // 4. Clipping di sicurezza per non uscire dalla griglia
-    if (y_pixel < MARGIN_Y) return MARGIN_Y;
-    if (y_pixel > MARGIN_Y + TRACE_H) return MARGIN_Y + TRACE_H;
-
-    return y_pixel;
 }
 
 float read_fpga_frequency() {
@@ -868,10 +885,13 @@ ui_status_t get_system_status_code(void) {
 
 void draw_channel_status(Channel *ch, uint16_t xPos, uint16_t yPos, bool force) {
     // Controllo se qualcosa è cambiato o se è richiesto il refresh forzato
-    if(ch->old_vdiv_idx != ch->vdiv_idx || ch->old_coupling != ch->coupling || force) {
-        
+    if(ch->old_vdiv_idx != ch->vdiv_idx || 
+       ch->old_coupling != ch->coupling || 
+       ch->old_volts_div != ch->volts_div || // Nuovo controllo per il Fine
+       force) {
+        ch->old_volts_div = ch->volts_div; // Aggiorniamo anche questo per il controllo Fine/Coarse
         // Pulizia area (100px larghezza, 16px altezza)
-        tft_fillRect(xPos, yPos, 100, 16, BLACK);
+        tft_fillRect(xPos, yPos, 120, 16, BLACK);
         
         // Colore del canale (Giallo per CH1, Ciano per CH2)
         setTextColor(ch->color, BLACK);
@@ -880,8 +900,23 @@ void draw_channel_status(Channel *ch, uint16_t xPos, uint16_t yPos, bool force) 
         // Stampa Etichetta (CH1 o CH2 basandosi sull'indirizzo di memoria)
         tft_Print(ch == &ch1 ? "CH1: " : "CH2: ");
         
-        // Stampa Valore V/div
-        tft_Print(v_div_labels[ch->vdiv_idx]); 
+        // --- LOGICA DI STAMPA VOLTAGGIO ---
+        if (!ch->isFine) {
+            // In Coarse usiamo le etichette predefinite (1-2-5)
+            tft_Print(v_div_labels[ch->vdiv_idx]); 
+        } 
+        else {
+            
+            if (ch->volts_div < 1.0f) {
+                // Sotto l'unità, meglio mostrare i mV come intero
+                tft_Print_int16((int16_t)(ch->volts_div * 1000));
+                tft_Print("mV");
+            } else {
+                // Sopra l'unità, usiamo il float con 2 decimali
+                tft_print_float(ch->volts_div, 2); 
+                tft_Print("V");
+            }
+        }
         tft_Print(" ");
         
         // Stampa Accoppiamento
@@ -951,13 +986,13 @@ void update_status_bar(bool force) {
     draw_channel_status(&ch1, xStart, yPos, force);
 
     // Aggiorna info CH2 (spostato di 100 pixel a destra)
-    draw_channel_status(&ch2, xStart + 100, yPos, force);
+    draw_channel_status(&ch2, xStart + 120, yPos, force);
 
     // --- BASE TEMPI ---
     if(old_current_time_base_idx != current_time_base_idx || force){
-        tft_fillRect(xStart + 210, yPos, 100, 16, BLACK);
+        tft_fillRect(xStart + 230, yPos, 100, 16, BLACK);
         setTextColor(WHITE, BLACK);
-        tft_set_cursor(xStart + 210, yPos);
+        tft_set_cursor(xStart + 230, yPos);
         tft_Print("T: ");
         tft_Print(time_base_labels[current_time_base_idx]);
         old_current_time_base_idx = current_time_base_idx;
@@ -966,9 +1001,9 @@ void update_status_bar(bool force) {
 
     // --- TRIGGER LEVEL ---
     if(old_trigger_level_12bit != trigger_level_12bit || force){
-        tft_fillRect(xStart + 310, yPos, 100, 16, BLACK);
+        tft_fillRect(xStart + 330, yPos, 100, 16, BLACK);
         setTextColor(GREEN, BLACK);
-        tft_set_cursor(xStart + 310, yPos);
+        tft_set_cursor(xStart + 330, yPos);
         tft_Print("Trig: ");
         // Calcoliamo il valore in Volt o mostriamo i bit
         // Se reg_trig_level è 0-4095 (12 bit)
@@ -980,7 +1015,7 @@ void update_status_bar(bool force) {
     // Supponiamo di aver calcolato 'freq'
     float freq = read_fpga_frequency();
     if(old_freq != freq){
-        tft_set_cursor(MARGIN_X + 210, yPos + 20); // Una riga sotto la T/div
+        tft_set_cursor(MARGIN_X + 230, yPos + 20); // Una riga sotto la T/div
         setTextColor(WHITE, BLACK);
         tft_Print("F:");
         
@@ -1131,7 +1166,7 @@ void init_channels() {
     ch2.enabled = 0;
     ch2.focused = 0;
     ch2.volts_div = 1.0;
-    ch2.offset = 60; 
+    ch2.offset = 70; 
     ch2.coupling = COUPL_DC; // Aggiunto accoppiamento di default
     ch2.probe = 0; // Sonda 1X di default
     ch2.inverted = false; // Non invertito di default
@@ -1143,30 +1178,25 @@ void init_channels() {
 
 void updateChannelVoltDiv(Channel *ch, int16_t current_enc, int16_t *last_enc) {
     if (current_enc != *last_enc) {
-        int8_t dir = (current_enc > *last_enc) ? 1 : -1;
-        *last_enc = current_enc; // Aggiorna il valore precedente tramite puntatore
-
+        /*uart_print("Encoder CH");
+        uart_print_int16(current_enc);
+        uart_print("\r\n");*/
         if (!ch->isFine) {
-            // --- MODALITÀ COARSE (Step 1-2-5) ---
-            int16_t new_idx = (int16_t)ch->vdiv_idx + dir;
-            
-            // Limiti dell'array (0-9 per le tue 10 label)
-            if (new_idx >= 0 && new_idx < 10) {
-                ch->vdiv_idx = (uint8_t)new_idx;
-                ch->volts_div = v_div_values[ch->vdiv_idx];
-            }
+            // --- COARSE: L'encoder (0-9) detta l'indice ---
+            ch->vdiv_idx = (uint8_t)current_enc;
+            ch->volts_div = v_div_values[ch->vdiv_idx];
         } 
         else {
-            // --- MODALITÀ FINE (Variazione continua) ---
-            // Cambiamento fluido del 2% ad ogni scatto per maggior precisione
-            float step = ch->volts_div * 0.02f; 
-            ch->volts_div += (dir * step);
-
-            // Limiti di sicurezza (es. da 10mV a 10V)
-            if (ch->volts_div < 0.01f) ch->volts_div = 0.01f;
-            if (ch->volts_div > 10.0f) ch->volts_div = 10.0f;
+            // --- FINE: Valore Assoluto Lineare ---
+            // L'encoder sposta il valore a step di 0.01 fisso
+            ch->volts_div = (float)current_enc / 100.0f;
         }
+
+        *last_enc = current_enc;
     }
+    /*uart_print("volts_div ");
+        uart_print_float(ch->volts_div, 2);
+        uart_print("\r\n");*/
 }
 
 // --- main loop ---
@@ -1279,7 +1309,7 @@ void scope_main(void)
                             toggleBWLimit(&ch1);
                             break;
                         case 6:  // Tasto 3 
-                            //cycleVoltDiv(&ch2);
+                            toggleFineCoarse(&ch1, &last_enc1);
                             break;
                         case 3:  // Tasto 3 
                             cycleProbe(&ch1);
@@ -1301,7 +1331,7 @@ void scope_main(void)
                             toggleBWLimit(&ch2);
                             break;
                         case 6:  // Tasto 3 
-                            //cycleVoltDiv(&ch2);
+                            toggleFineCoarse(&ch2, &last_enc2);
                             break;
                         case 3:  // Tasto 3 
                             cycleProbe(&ch2);

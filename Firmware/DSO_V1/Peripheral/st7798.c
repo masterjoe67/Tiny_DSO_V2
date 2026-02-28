@@ -733,6 +733,74 @@ void tft_drawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t c
     }
 }
 
+void tft_drawLine_Clipped(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color, uint16_t y_min, uint16_t y_max) {
+    // 1. Caso speciale: Linee perfettamente dritte
+    if (x1 == x2) {
+        // Linea verticale: dobbiamo clippare l'inizio e la fine della linea stessa
+        int16_t startY = (y1 < y2 ? y1 : y2);
+        int16_t endY = (y1 > y2 ? y1 : y2);
+        
+        if (startY < y_min) startY = y_min;
+        if (endY > y_max)   endY = y_max;
+        
+        if (startY <= endY) {
+            tft_drawFastVLine(x1, startY, (endY - startY) + 1, color);
+        }
+        return;
+    }
+    
+    if (y1 == y2) {
+        // Linea orizzontale: la disegnamo solo se la Y è nel range
+        if (y1 >= y_min && y1 <= y_max) {
+            tft_drawFastHLine((x1 < x2 ? x1 : x2), y1, abs((int16_t)x2 - (int16_t)x1) + 1, color);
+        }
+        return;
+    }
+
+    // 2. Logica di Bresenham standard
+    int16_t x = x1;
+    int16_t y = y1;
+    int16_t x_fine = x2;
+    int16_t y_fine = y2;
+
+    bool steep = abs(y_fine - y) > abs(x_fine - x);
+    if (steep) {
+        int16_t tmp;
+        tmp = x; x = y; y = tmp;
+        tmp = x_fine; x_fine = y_fine; y_fine = tmp;
+    }
+
+    if (x > x_fine) {
+        int16_t tmp;
+        tmp = x; x = x_fine; x_fine = tmp;
+        tmp = y; y = y_fine; y_fine = tmp;
+    }
+
+    int16_t dx = x_fine - x;
+    int16_t dy = abs(y_fine - y);
+    int16_t err = dx / 2;
+    int16_t ystep = (y < y_fine) ? 1 : -1;
+
+    // 3. Ciclo di disegno con clipping
+    for (; x <= x_fine; x++) {
+        // Determiniamo quali sono le coordinate reali correnti
+        int16_t realX = steep ? y : x;
+        int16_t realY = steep ? x : y;
+
+        // --- CLIPPING CHECK ---
+        // Disegniamo il pixel solo se la coordinata Y reale è nei limiti
+        if (realY >= y_min && realY <= y_max) {
+            tft_drawPixel(realX, realY, color);
+        }
+
+        err -= dy;
+        if (err < 0) {
+            y += ystep;
+            err += dx;
+        }
+    }
+}
+
 /***************************************************************************************
 ** Function name:           tft_data16
 ** Description:             Invia 16 bit di colore (RGB565) al display
@@ -943,6 +1011,36 @@ void tft_print_float(float value, uint8_t decimals) {
             tft_print_int(digit);
             fraction -= (float)digit;
         }
+    }
+}
+
+void tft_Print_int16(int16_t value) {
+    // 1. Gestione del segno negativo
+    if (value < 0) {
+        tft_Print("-");
+        value = -value;
+    }
+
+    // 2. Caso particolare: lo zero
+    if (value == 0) {
+        tft_Print("0");
+        return;
+    }
+
+    // 3. Buffer per la conversione (massimo 5 cifre per un int16 + terminatore)
+    char buffer[7]; 
+    uint8_t i = 0;
+
+    // Estraiamo le cifre partendo dall'ultima
+    while (value > 0) {
+        buffer[i++] = (value % 10) + '0';
+        value /= 10;
+    }
+
+    // 4. Stampa le cifre in ordine inverso
+    while (i > 0) {
+        char s[2] = {buffer[--i], '\0'};
+        tft_Print(s);
     }
 }
 
