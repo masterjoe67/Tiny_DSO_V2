@@ -872,7 +872,7 @@ void tft_printCenteredX(const char *str, int16_t xStart, int16_t xEnd, int16_t y
         for (uint16_t i = 0; i < len; i++) {
             uint8_t uniCode = str[i];
             // Sommiamo la larghezza del carattere + 1 pixel di spazio
-            textWidth += pgm_read_byte(widtbl_f16 + uniCode) + 1;
+            textWidth += pgm_read_byte(widtbl_f16 + uniCode);
         }
         // Togliamo l'ultimo pixel di spazio aggiunto in eccesso dopo l'ultima lettera
         textWidth--; 
@@ -886,7 +886,7 @@ void tft_printCenteredX(const char *str, int16_t xStart, int16_t xEnd, int16_t y
     int16_t centeredX = xStart + (areaWidth - textWidth) / 2;
 
     // Se il calcolo porta il testo fuori a sinistra, forziamo l'inizio all'area
-    if (centeredX < xStart) centeredX = xStart;
+   // if (centeredX < xStart) centeredX = xStart;
 
     tft_printAt(str, centeredX, y, color, bg, font);
 }

@@ -49,7 +49,8 @@ component RAMAdrDcd is port(
 	                     -- Data memory i/f
 		                 ram_we    : out std_logic;
 		                 ram_ce    : out std_logic;
-						 ram_sel   : out std_logic
+							  bram_ce   : out std_logic;
+							  ram_sel   : out std_logic
 		                );
 end component;
 

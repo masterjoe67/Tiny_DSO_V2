@@ -204,15 +204,6 @@ signal pm_din         : std_logic_vector(core_inst'range);
 
 signal pm_dout        : std_logic_vector(core_inst'range);
 
---signal ramdata_in_tmp : std_logic_vector(ram_din'range); -- Data input of DRAM
-
---signal pm_adr_tmp     : std_logic_vector(core_pc'range);
-
-signal TDO_Out        : std_logic;
-signal TDO_OE         : std_logic;
-
-signal JTAG_Rst       : std_logic;
-
 -- **********************  JTAG and memory **********************************************
 
 signal nrst_cp64m_tmp   : std_logic;
@@ -254,7 +245,8 @@ signal aes_mack         : std_logic;
 signal stb_IO        : std_logic;   
 signal stb_IOmod     : std_logic_vector (CNumOfSlaves-1 downto 0);
 
-signal ram_ce      	 : std_logic;
+signal ram_ce      	: std_logic;
+signal is_bram 		: std_logic;
 
 signal slv_cpuwait   : std_logic;
 
@@ -264,9 +256,13 @@ signal mem_ram_dbus_in  : std_logic_vector (7 downto 0);
 signal mem_ram_dbus_out : std_logic_vector (7 downto 0);
 signal mem_ramwe        : std_logic;
 signal mem_ramre        : std_logic;
+signal bram_ce				: std_logic;
+
 
 -- RAM
 signal ram_ramwe         : std_logic;
+signal mux_system_out : std_logic_vector(7 downto 0); -- Uscita RAM + Slave
+signal scope_bram_dout : std_logic_vector(7 downto 0); -- Uscita BRAM campioni
 
 -- Clock generation/distribution
 signal clk4M             : std_logic;
@@ -568,7 +564,7 @@ ResetGenerator_Inst:component ResetGenerator port map(
 	                            nrst       => nrst,
 								npwrrst    => vcc,
 								wdovf      => wdtmout,
-			                    jtagrst    => JTAG_Rst,
+			                    jtagrst    => gnd,
       							-- Reset outputs
 					            nrst_cp2   => core_ireset,
 			                    nrst_cp64m => nrst_cp64m_tmp,
@@ -581,18 +577,22 @@ ClockGatingDis:if not CImplClockSw generate
  core_cp2 <=  clk4M;
 end generate;
 
--- **********************  JTAG and memory **********************************************
+-- **********************  memory **********************************************
 
 -- ram_cp2_n <= not clk;
 ram_cp2_n <= not clk4M;
+
+
+-- La RAM normale risponde solo se NON siamo nell'area BRAM
+--ram_ce <= '1' when is_bram = '0' else '0';
 
 FirsMemConfig:if C_OrgMemCfg generate
 -- The first memory configuration (PM 16Kx16/DM 16Kx8)
 -- Data memory(8-bit)					   
 DRAM_Inst:component XDM16Kx8 port map(
-	                    cp2       => ram_cp2_n,
-						ce        => vcc,
-	                    address   => mem_ramadr(13 downto 0), 
+	                cp2       => ram_cp2_n,
+						 ce        => ram_ce,
+	                address   => mem_ramadr(13 downto 0), 
 					    din       => mem_ram_dbus_in, 
 					    dout      => mem_ram_dbus_out, 
 					    we        => ram_ramwe
@@ -601,9 +601,9 @@ DRAM_Inst:component XDM16Kx8 port map(
 					   
 -- Program memory					   
 PM_Inst:component XPM16Kx16 port map(
-	                  cp2     => ram_cp2_n, 
+	              cp2     => ram_cp2_n, 
 					  ce      => vcc,
-	                  address => pm_adr(13 downto 0),
+	              address => pm_adr(13 downto 0),
 					  din     => pm_din,
 					  dout    => pm_dout,
 					  weh     => pm_h_we,
@@ -616,9 +616,9 @@ SecondMemConfig:if not C_OrgMemCfg generate
 -- The second memory configuration (PM 8Kx16/DM 32Kx8)
 -- Data memory(8-bit)					   
 DRAM_Inst:component XDM32Kx8 port map(
-	                    cp2       => ram_cp2_n,
-						ce        => vcc,
-	                    address   => mem_ramadr(14 downto 0), 
+	                cp2       => ram_cp2_n,
+						 ce        => vcc,
+	                address   => mem_ramadr(14 downto 0), 
 					    din       => mem_ram_dbus_in, 
 					    dout      => mem_ram_dbus_out, 
 					    we        => ram_ramwe
@@ -637,42 +637,13 @@ PM_Inst:component XPM8Kx16 port map(
 					  );
 end generate;
 					   
--- **********************  JTAG and memory **********************************************
+-- **********************  memory **********************************************
 
 -- Sleep mode is not implemented
 sleep_mode <= '0';
 
 
---JTAGOCDPrgTop_Inst:component JTAGOCDPrgTop port map(
---	                      -- AVR Control
---                          ireset       => core_ireset,
---                          cp2	       => core_cp2,
---						  -- JTAG related inputs/outputs
---						  TRSTn        => TRSTn, -- Optional
---	                      TMS          => TMS,
---                          TCK	       => TCK,
---                          TDI          => TDI,
---                          TDO          => TDO_Out,
---						  TDO_OE       => TDO_OE,
---						  -- From the core
---                          PC           => core_pc,
---						  -- To the PM("Flash")
---						  pm_adr       => pm_adr,
---						  pm_h_we      => pm_h_we,
---						  pm_l_we      => pm_l_we,
---						  pm_dout      => pm_dout,
---						  pm_din       => pm_din,
---						  -- To the "EEPROM" 
---						  EEPrgSel     => EEPrgSel,
---						  EEAdr        => EEAdr,
---						  EEWrData     => EEWrData,
---						  EERdData     => EERdData,
---						  EEWr         => EEWr,
---						  -- CPU reset
---						  jtag_rst     => JTAG_Rst
---                          );
 
--- JTAG OCD module connection to the external multiplexer
 io_port_out(3) <= (others => '0');
 io_port_out_en(3) <= gnd;						  
 						  
@@ -681,7 +652,7 @@ pm_h_we        <= gnd;
 pm_l_we        <= gnd;
 pm_din <= (others => '0');
 pm_adr <= core_pc;		
-JTAG_Rst <= '0';		  
+		  
 
 -- *******************************************************************************************************	
 -- DMA, Memory decoder, ...
@@ -757,12 +728,16 @@ busmin(2).ramwe  <=	gnd;
 aes_mack         <=  not busmwait(2);
 
 -- UART DMA slave part
-slv_outs(0).dout    <= (others => '0');
-slv_outs(0).out_en 	<= gnd;	
+--slv_outs(0).dout    <= (others => '0');
+--slv_outs(0).out_en 	<= gnd;	
 
 -- AES DMA slave part
 slv_outs(1).dout    <= (others => '0');
 slv_outs(1).out_en 	<= gnd;	
+
+-- SCOPE slave:
+slv_outs(0).dout   <= scope_bram_dout;
+slv_outs(0).out_en <= bram_ce; -- Lo scope parla quando la BRAM è selezionata
 
 
 -- Memory read mux
@@ -770,7 +745,7 @@ MemRdMux_inst:component MemRdMux port map(
 	slv_outs  =>  slv_outs,
 	ram_sel   =>  ram_sel,    -- Data RAM selection(optional input)
 	ram_dout  =>  mem_ram_dbus_out,            -- Data memory output (From RAM)
-	dout      =>  mem_mux_out -- Data output (To the core and other bus masters)
+	dout      =>  mux_system_out -- Data output (To the core and other bus masters)
 	);
 
 
@@ -786,6 +761,7 @@ RAMAdrDcd_Inst:component RAMAdrDcd port map(
 	                     -- Data memory i/f
 		                 ram_we    => ram_ramwe,
 		                 ram_ce    => ram_ce,
+							  bram_ce   => bram_ce,
 						     ram_sel   => ram_sel
 		                );
 
@@ -807,12 +783,17 @@ scope_inst : entity work.oscilloscope_top
         mmio_wdata  => core_dbusout,
         mmio_we     => core_iowe,
         mmio_rdata  => scope_reg_dbusout,
-        out_en      => scope_reg_out_en
+        out_en      => scope_reg_out_en,
+		  mem_ramadr  => mem_ramadr,
+		  ramre		  => mem_ramre,
+		  data_out    => scope_bram_dout,
+		  bram_ce	  => bram_ce
+		  
     );
 	io_port_out(7) <= scope_reg_dbusout;
 	io_port_out_en(7) <= scope_reg_out_en;
 							   
 							   
-	
+mem_mux_out <= mux_system_out;
 	
 end Struct;

@@ -12,9 +12,9 @@ package XMemCompPack is
 
 	
 component XPM16Kx16 is port(
-	                  cp2     : in  std_logic;
+	              cp2     : in  std_logic;
 					  ce      : in  std_logic;
-	                  address : in  std_logic_vector(13 downto 0); 
+	              address : in  std_logic_vector(13 downto 0); 
 					  din     : in  std_logic_vector(15 downto 0);		                
 					  dout    : out std_logic_vector(15 downto 0);
 					  weh     : in  std_logic;
@@ -24,7 +24,7 @@ end component;
 
 
 component XDM16Kx8 is port(
-	                    cp2       : in  std_logic;
+	               cp2       : in  std_logic;
 						ce      : in  std_logic;
 	                    address   : in  std_logic_vector(13 downto 0); 
 					    din       : in  std_logic_vector(7 downto 0);		                

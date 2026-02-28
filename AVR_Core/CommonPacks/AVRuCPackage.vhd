@@ -131,11 +131,6 @@ constant KEY_CODE 	: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#11#
 constant KEY_CTRL 	: std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#12#);
 
 
--- Encoder 
-constant ENC_VAL_H     : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#1D#);
-constant ENC_VAL_L     : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#1C#);
-constant ENC_BASE 	  : std_logic_vector(3 downto 0) := "0111";
-
 -- Encoder NEW
 constant ENC_INDEX  	  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#04#);
 constant ENC_DATA_HI   : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#05#);
@@ -151,6 +146,8 @@ constant REG_FREQ0  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#00
 constant REG_FREQ1  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#01#);
 constant REG_FREQ2  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#02#);
 constant REG_FREQ3  : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#03#);
+constant REG_RESET_INDEX : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#1C#);
+
 -- ******************** Parallel port address table **************************************
 constant CMaxNumOfPPort : positive := 2;
 
@@ -171,11 +168,6 @@ constant PPortAdrArray : PPortAdrTblArray_Type := ((PORTA_Address,DDRA_Address,P
 -- Watchdog
 constant WDTCR_Address : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#21#);
 
--- JTAG OCDR (ATmega128)
-constant OCDR_Address   : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#22#);
-
--- JTAG OCDR (ATmega16)
---constant OCDR_Address   : std_logic_vector(IOAdrWidth-1 downto 0) := CAVRIOAdr(16#31#);
 
 -- ***************************************************************************************
 

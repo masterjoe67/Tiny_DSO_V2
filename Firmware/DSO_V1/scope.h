@@ -12,11 +12,13 @@
 #define REG_FREQ1     _SFR_IO8(0x01)
 #define REG_FREQ2     _SFR_IO8(0x02)
 #define REG_FREQ3     _SFR_IO8(0x03)
-
+#define INDEX_RESET   _SFR_IO8(0x1C)
 #define REG_BASETIME        _SFR_IO8(0x14)
 #define REG_TRIGGER_LEVEL   _SFR_IO8(0x13)
 #define REG_TRIGGER_MODE    _SFR_IO8(0x15)
 
+#define BRAM_START_ADDR 0x4000
+#define BRAM_DATA_PTR   ((volatile uint8_t *)0x4000)
 
 #define TRIG_CTRL_BIT  7         // il bit che sblocca wr_ptr
 
@@ -88,6 +90,14 @@
 
 #define MAX_TIMEBASE_IDX 18
 #define MAX_VDIV_IDX 9
+
+#define PRE_TRIGGER       200
+#define POST_TRIGGER      200
+
+// Parametri reticolo
+#define GRID_SPACING 30     // distanza tra linee
+#define DOT_SPACING 4       // distanza tra puntini
+#define COLOR_GRID WHITE
 
 
 extern uint16_t _width;

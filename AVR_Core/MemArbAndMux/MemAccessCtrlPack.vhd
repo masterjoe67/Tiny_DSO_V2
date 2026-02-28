@@ -11,7 +11,7 @@ use IEEE.std_logic_1164.all;
 package MemAccessCtrlPack is
 
 constant CNumOfBusMasters : positive := 3;	
-constant CNumOfSlaves     : positive := 2;
+constant CNumOfSlaves     : positive := 3;
 
 constant CUseRAMSel		  : boolean := FALSE;
 
