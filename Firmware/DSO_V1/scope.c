@@ -13,8 +13,25 @@
 
 
 
-int16_t old_buffer_a[400];
-int16_t old_buffer_b[400];
+//int16_t old_buffer_a[400];
+//int16_t old_buffer_b[400];
+
+// Definiamo l'inizio della RAM "extra" (dopo i primi 4KB dell'ATmega128)
+// L'indirizzo 0x1100 è l'inizio della zona oltre i 4KB standard
+#define RAM_EXTRA_START 0x1100
+#define ADDR_OLD_A (int16_t*)(0x1740)
+#define ADDR_OLD_B (int16_t*)(0x1A60)
+
+// Creiamo dei puntatori che puntano a quella zona
+uint16_t *ch1_buffer = (uint16_t *)(RAM_EXTRA_START);
+uint16_t *ch2_buffer = (uint16_t *)(RAM_EXTRA_START + 800); // 800 byte dopo (400 samples * 2)
+
+// Puntatori ai buffer "storici" (vecchi dati per cancellazione)
+int16_t *old_buffer_a = (int16_t *)(RAM_EXTRA_START + 1600);
+int16_t *old_buffer_b = (int16_t *)(RAM_EXTRA_START + 2400);
+
+// Mappiamo la struct dopo i buffer dei campioni (es. a 0x3000)
+ScopeMeasures *misure = (ScopeMeasures *)0x3000;
 
 Channel ch1, ch2;
 
@@ -31,15 +48,17 @@ bool time_div_sel_changed = true;
 static trigger_mode_t trigger_mode = TRIG_MODE_AUTO;
 static trig_slope_t trigger_slope = TRIG_SLOPE_RISING;
 static uint8_t trigger_source = 1;
+static uint8_t old_meas_source = 1;
+static uint8_t old_meas_type = 1;
+static uint8_t old_meas_active = 2;
+static uint8_t old_f_active = 0;
 
 uint8_t currentMenu = MENU_CH1; // Default
 
 static Point_t old_trig_a, old_trig_b, old_trig_c;
 static int16_t last_trig_y = -100; // Inizializzato fuori schermo
 
-//bool ch_visible[2] = {true, true}; 
-int16_t* buffers_vecchi[2] = {old_buffer_a, old_buffer_b}; // Puntatori ai tuoi buffer di cancellazione
-
+int16_t* buffers_vecchi[2] = { ADDR_OLD_A, ADDR_OLD_B };
 uint16_t trigger_level_12bit = 0x07FF;
 
 static int16_t last_enc1 = 0;
@@ -63,8 +82,6 @@ const char* v_div_labels[] = {
 
 
 uint8_t old_current_time_base_idx = 0xFF;
-
-//uint8_t old_ch_coupling[2] = {0xFF, 0xFF} ;
 uint16_t old_trigger_level_12bit = 0xFFFF;
 uint32_t old_freq = 0xFFFFFFFF;
 
@@ -90,6 +107,55 @@ float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit);
 //int16_t calcolaYTraccia(Channel *ch, uint8_t valoreADC);
 int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_16bit);
 
+// Algoritmo Integer Square Root (veloce per AVR)
+uint32_t isqrt(uint32_t n) {
+    uint32_t res = 0;
+    uint32_t bit = 1UL << 30; // Il bit più alto possibile
+
+    // "bit" parte dalla potenza di 4 più alta <= n
+    while (bit > n) bit >>= 2;
+
+    while (bit != 0) {
+        if (n >= res + bit) {
+            n -= res + bit;
+            res = (res >> 1) + bit;
+        } else {
+            res >>= 1;
+        }
+        bit >>= 2;
+    }
+    return res;
+}
+
+void calculate_measures(int16_t *buffer, uint16_t size) {
+    uint32_t sum_sq = 0;   // Per il calcolo RMS (v^2)
+    int32_t  sum_raw = 0;  // Per il valore medio
+    int16_t  max_v = -2048; // Assumendo dati bipolari o centrati
+    int16_t  min_v =  2047;
+
+    for (uint16_t i = 0; i < size; i++) {
+        int16_t val = buffer[i];
+
+        // 1. Ricerca Min/Max per Vpp
+        if (val > max_v) max_v = val;
+        if (val < min_v) min_v = val;
+
+        // 2. Accumulo per Media
+        sum_raw += val;
+
+        // 3. Accumulo quadrati per RMS
+        // Usiamo i 32 bit perché 2048^2 = 4.194.304 (ci sta largo)
+        sum_sq += (uint32_t)((int32_t)val * val);
+    }
+
+    // Risultati finali scritti direttamente in XRAM
+    misure->vpp  = max_v - min_v;
+    misure->vavg = sum_raw / size;
+    
+    // RMS = Radice quadrata della media dei quadrati
+    // La funzione sqrt() di avr-libc è ottimizzata
+    misure->vrms = (uint16_t)sqrt((double)sum_sq / size);
+}
 
 void set_base_time(uint8_t index) {
     // Limite di sicurezza a 1s (indice 18)
@@ -139,35 +205,30 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
 {
     const int16_t Y_MIN = MARGIN_Y;
     const int16_t Y_MAX = MARGIN_Y + TRACE_H;
+
+    // Variabili per il calcolo misure (locali per massimizzare la velocità nei registri)
+    uint32_t sum_sq = 0;   
+    int32_t  sum_raw = 0;  
+    int16_t  max_v = -32768; // Inizializzati al minimo/massimo possibile per int16
+    int16_t  min_v =  32767;
     
     int16_t y_prev_new_a = -100, y_prev_old_a = -100; 
     int16_t y_prev_new_b = -100, y_prev_old_b = -100; 
 
-    // --- RESET INDICE HARDWARE ---
-    INDEX_RESET = 0x01; 
+   
 
     for (uint16_t i = 0; i < length; i++) {
         uint16_t x = i + MARGIN_X;
 
-        // 1. LETTURA DALLA BRAM (Sempre 4 byte per sincronismo FPGA)
-        // Offset 0,1 -> Canale A | Offset 2,3 -> Canale B
-        uint8_t a_l = BRAM_DATA_PTR[0];
-        uint8_t a_h = BRAM_DATA_PTR[1];
-        uint8_t b_l = BRAM_DATA_PTR[2];
-        uint8_t b_h = BRAM_DATA_PTR[3]; // Qui l'FPGA incrementa reg_index_int
-
         // --- GESTIONE CANALE A ---
-        // Cancellazione vecchia traccia A
         if (old_buf_a[i] > Y_MIN && old_buf_a[i] < Y_MAX) {
             if (vectors && i > 0 && y_prev_old_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX);
             else tft_drawPixel(x, old_buf_a[i], BLACK);
         }
         y_prev_old_a = old_buf_a[i];
 
-        // Disegno nuova traccia A (se attivo)
         if (ch_a->enabled) {
-            uint16_t val_a = (a_h << 8) | a_l;
-            int16_t y_now_a = calcolaYTraccia(ch_a, val_a);
+            int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[i]);
             if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
                 if (vectors && i > 0 && y_prev_new_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_a, ch_a->color);
@@ -177,17 +238,14 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
         } else { old_buf_a[i] = -100; }
 
         // --- GESTIONE CANALE B ---
-        // Cancellazione vecchia traccia B
         if (old_buf_b[i] > Y_MIN && old_buf_b[i] < Y_MAX) {
             if (vectors && i > 0 && y_prev_old_b > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_old_b, x, old_buf_b[i], BLACK, Y_MIN, Y_MAX);
             else tft_drawPixel(x, old_buf_b[i], BLACK);
         }
         y_prev_old_b = old_buf_b[i];
 
-        // Disegno nuova traccia B (se attivo)
         if (ch_b->enabled) {
-            uint16_t val_b = (b_h << 8) | b_l;
-            int16_t y_now_b = calcolaYTraccia(ch_b, val_b);
+            int16_t y_now_b = calcolaYTraccia(ch_b, ch2_buffer[i]);
             if (y_now_b > Y_MIN && y_now_b < Y_MAX) {
                 if (vectors && i > 0 && y_prev_new_b > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_b, x, y_now_b, ch_b->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_b, ch_b->color);
@@ -195,7 +253,48 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
             y_prev_new_b = y_now_b;
             old_buf_b[i] = y_now_b;
         } else { old_buf_b[i] = -100; }
+
+        // --- ACCUMULO DATI PER MISURE (Ottimizzato) ---
+        if(misure->active) {
+            // Seleziona il campione grezzo in base alla sorgente del menu
+            // Nota: sorgente 1 = CH1, sorgente 2 = CH2 (adattalo se i tuoi indici sono 0 e 1)
+            int16_t val = (misure->source == 1) ? ch1_buffer[i] : ch2_buffer[i];
+
+            if (val > max_v) max_v = val;
+            if (val < min_v) min_v = val;
+            sum_raw += val;
+            sum_sq += (uint32_t)((int32_t)val * val);
+        }
     } 
+
+    // --- CALCOLO FINALE E CONVERSIONE IN VOLT ---
+
+    // --- CALCOLO FINALE CON PRECISIONE FLOAT ---
+    if(misure->active) {
+    // 1. Identifica il canale (Sorgente 1 = A, 2 = B)
+    Channel *ch_src = (misure->source == 1) ? ch_a : ch_b;
+
+    // 1. COSTANTE FISSA DI CALIBRAZIONE (Quanto vale 1 bit dell'ADC in Volt)
+    // Esempio: se il tuo ingresso accetta 3.3V max, metti 3.3f
+    // Se hai un partitore fisso che porta 20V a 3.3V, metti 20.0f
+    const float VOLT_FONDO_SCALA = 3.3f; 
+    const float LSB_BASE = VOLT_FONDO_SCALA / 4096.0f;
+
+    // 2. APPLICAZIONE DEL MOLTIPLICATORE (Attenuatore Sonda)
+    // Questo è l'unico parametro del menu che influenza la misura reale!
+    float lsb_reale = LSB_BASE * ch_src->multiplier;
+
+    // 3. Vpp: Forza la sottrazione a float PRIMA della moltiplicazione
+    misure->vpp = (float)(max_v - min_v) * lsb_reale;
+
+    // 4. Vavg: Questa è la riga più critica! 
+    // Se sum_raw e length sono interi, DEVI castarli entrambi.
+    misure->vavg = ((float)sum_raw / (float)length) * lsb_reale;
+    
+    // 5. Vrms: Usa sqrtf (specifica per float) invece di sqrt (per double)
+    float mean_sq = (float)sum_sq / (float)length;
+    misure->vrms = sqrtf(mean_sq) * lsb_reale;
+}
 }
 
 void osc_wait_ready(void)
@@ -281,12 +380,18 @@ void osc_read_triggered()
     // Avvia trasferimento dati da FPGA a AVR
     osc_arm_readout(); 
 
-    /* 4. Trasferimento dati (Dura pochi microsecondi a 60MHz) */
-   /* for (int i = 0; i < 400; i++) {
-        b[i] = REG_CHB;
-        a[i] = REG_CHA;
-    }*/
-
+    // 4. LETTURA DALLA BRAM (Sempre 4 byte per sincronismo FPGA)
+        // Offset 0,1 -> Canale A | Offset 2,3 -> Canale B
+        // --- RESET INDICE HARDWARE ---
+    INDEX_RESET = 0x01; 
+    for(uint16_t i = 0; i < 400; i++) {
+        uint8_t a_l = BRAM_DATA_PTR[0];
+        uint8_t a_h = BRAM_DATA_PTR[1];
+        uint8_t b_l = BRAM_DATA_PTR[2];
+        uint8_t b_h = BRAM_DATA_PTR[3]; // Qui l'FPGA incrementa reg_index_int
+        ch1_buffer[i] = (a_h << 8) | a_l;
+        ch2_buffer[i] = (b_h << 8) | b_l;
+    }
     /* 5. Riarmo Trigger automatico */
     if (is_running && !(trigger_mode == TRIG_MODE_SINGLE && freeze)) {
         REG_TRIG = 0x01;
@@ -339,7 +444,7 @@ int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit) {
     // 2. Calcoliamo il fattore di scala totale
     // Questo trasforma il valore ADC direttamente in "pixel di spostamento"
     // Formula: (Delta / 4095 * 3.3V * Multiplier / VoltsDiv) * 30 pixel
-    float fattoreSpostamento = (deltaADC * 3.3f / ADC_MAX) * ch->multiplier;
+    float fattoreSpostamento = (deltaADC * 3.3f / ADC_MAX); // * ch->multiplier;
     float divisioni = fattoreSpostamento / ch->volts_div;
     
     if (ch->inverted) divisioni = -divisioni;
@@ -436,8 +541,6 @@ void drawMenuButton(uint8_t index, const char* label, const char* data, bool act
     
 
     // 3. Scrivi il testo passando tutti i parametri richiesti dalla tua funzione
-    // Usiamo 'color' per il testo e 'bgColor' per il fondo del carattere
-    //tft_printAt(label, 415, y + 15, color, bgColor, 1); // Font 1 per UI, regola se vuoi un font diverso
     tft_printCenteredX(label, 410, 475, y + 5, color, bgColor, 1); 
     tft_printCenteredX(data, 410, 475, y + 20, color, bgColor, 2);
 }
@@ -596,26 +699,26 @@ void updateSidebarLabels() {
     uint16_t menuColor; // Variabile per il colore del titolo
     switch (currentMenu) {
         case MENU_CH1:
-            menuTitle = " CH 1 ";
+            menuTitle = "CH 1";
             menuColor = ch1.color;  // Colore traccia 1
             break;
             
         case MENU_CH2:
-            menuTitle = " CH 2";
+            menuTitle = "CH 2";
             menuColor = ch2.color;    // Colore traccia 2
             break;
             
         case MENU_TRIG:
-            menuTitle = " TRIG ";
+            menuTitle = "TRIGER";
             menuColor = YELLOW; // Colore linea trigger
             break;
             
-        /*case MENU_TBASE:
-            menuTitle = "T-BASE";
+        case MENU_MEAS:
+            menuTitle = "MEASURE";
             menuColor = WHITE;
             break;
         
-        case MENU_PAN:
+        /*case MENU_PAN:
             menuTitle = " PAN  ";
             menuColor = MAGENTA;
             break;*/
@@ -626,8 +729,9 @@ void updateSidebarLabels() {
             break;
     }
     
-    // Scriviamo il titolo a destra (X=410) sopra i tasti
-    tft_printAt(menuTitle, 425, 5, menuColor, DARKGREY, 2);
+    // Scriviamo il titolo del menu centrato sopra i tasti, con il colore specifico
+    tft_fillRect(410, 0, 480, 20, DARKGREY);
+    tft_printCenteredX(menuTitle, 410, 475, 5, menuColor, DARKGREY, 2); // Opzione centrata
 
     // --- 2. LOGICA TASTI SIDEBAR ---
 
@@ -647,7 +751,7 @@ void updateSidebarLabels() {
         // TASTO 2: Volt/div (Focus sull'encoder, ma mostriamo anche il moltiplicatore della sonda)
         //char vdivLabel[10];
         //sprintf(vdivLabel, "V/DIV: %.1f", ch->volts_div);
-        const char* vdivLabel[] = {"COARSE", "Fine", "GND"};
+        const char* vdivLabel[] = {"COARSE", "Fine"};
         drawMenuButton(2, "V/DIV", vdivLabel[ch->isFine], false, WHITE);
 
         // TASTO 3: Sonda (Aggiungi 'probe' alla struct!)
@@ -662,16 +766,28 @@ void updateSidebarLabels() {
     else if (currentMenu == MENU_TRIG) {
         // TASTO 0: Modalità (AUTO/NORMAL) - Usiamo i nuovi nomi
         //(0, (trigger_mode == 0) ? "AUTO  " : "NORM  ", true, WHITE);
-        drawMenuButton(0, "Trigger Source", (trigger_source == 1) ? "SRC: CH1" : "SRC: CH2", true, WHITE);
+        drawMenuButton(0, "Source", (trigger_source == 1) ? "CH1" : "CH2", true, WHITE);
         // TASTO 1: Slope (RISE/FALL) - Usiamo i nuovi nomi
         //(1, (trigger_slope == 1) ? "RISE" : "FALL", true, WHITE);
-        drawMenuButton(1, "Slope", trigger_slope ? "SLP: RISE" : "SLP: FALL", true, WHITE);
+        drawMenuButton(1, "Slope", trigger_slope ? "RISE" : "FALL", true, WHITE);
         // TASTO 2: Sorgente (CH1/CH2) - Usiamo i nuovi nomi
         //drawMenuButton(2, (trigger_source == 1) ? "SRC: CH1" : "SRC: CH2", true, WHITE);
-        drawMenuButton(2, "Mode", (trigger_mode == 0) ? "MODE: AUTO" : "MODE: NORM", true, WHITE);
-        // TASTO 3: Livello (LEVEL)
-        //drawMenuButton(3, (encoderMode == MODE_TRIG_LEVEL) ? "> LEV <" : "LEVEL", (encoderMode == MODE_TRIG_LEVEL), WHITE);
+        drawMenuButton(2, "Mode", (trigger_mode == 0) ? "AUTO" : "NORM", true, WHITE);
+        // TASTO 3: 
+        drawMenuButton(3, "", "", true, WHITE);
+        drawMenuButton(4, "", "", true, WHITE);
+        
+    }
+    else if (currentMenu == MENU_MEAS) {
+        drawMenuButton(0, "Source", (misure->source == 1) ? "CH1" : "CH2", true, WHITE);
 
+        const char* measLabels[] = {"VPP", "VAVG", "VRMS"};
+        drawMenuButton(1, "Type", measLabels[misure->type], true, WHITE);
+
+
+        drawMenuButton(2, "Show", (misure->active == 0) ? "OFF" : "ON", true, WHITE);
+        drawMenuButton(3, "Freq.", (misure->f_active == 0) ? "OFF" : "ON", true, WHITE);
+        drawMenuButton(4, "", "", true, WHITE);
         
     }
 
@@ -694,8 +810,6 @@ void updateSidebarLabels() {
   
     }*/
 }
-
-
 
 void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
     ch->isFine = !ch->isFine;
@@ -744,7 +858,6 @@ void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
     // Aggiorna interfaccia (usando l'indice corretto del tasto, qui 2)
     drawMenuButton(2, "V/DIV", ch->isFine ? "FINE" : "COARSE", ch->isFine, WHITE);
 }
-
 
 void toggleInvert(Channel *ch) 
 {
@@ -887,9 +1000,11 @@ void draw_channel_status(Channel *ch, uint16_t xPos, uint16_t yPos, bool force) 
     // Controllo se qualcosa è cambiato o se è richiesto il refresh forzato
     if(ch->old_vdiv_idx != ch->vdiv_idx || 
        ch->old_coupling != ch->coupling || 
-       ch->old_volts_div != ch->volts_div || // Nuovo controllo per il Fine
+       ch->old_volts_div != ch->volts_div ||
+       ch->old_multiplier != ch->multiplier || // Nuovo controllo per il Fine
        force) {
         ch->old_volts_div = ch->volts_div; // Aggiorniamo anche questo per il controllo Fine/Coarse
+        ch->old_multiplier = ch->multiplier; // Aggiorniamo anche questo per il controllo Probe
         // Pulizia area (100px larghezza, 16px altezza)
         tft_fillRect(xPos, yPos, 120, 16, BLACK);
         
@@ -901,22 +1016,19 @@ void draw_channel_status(Channel *ch, uint16_t xPos, uint16_t yPos, bool force) 
         tft_Print(ch == &ch1 ? "CH1: " : "CH2: ");
         
         // --- LOGICA DI STAMPA VOLTAGGIO ---
-        if (!ch->isFine) {
-            // In Coarse usiamo le etichette predefinite (1-2-5)
-            tft_Print(v_div_labels[ch->vdiv_idx]); 
-        } 
-        else {
-            
-            if (ch->volts_div < 1.0f) {
-                // Sotto l'unità, meglio mostrare i mV come intero
-                tft_Print_int16((int16_t)(ch->volts_div * 1000));
-                tft_Print("mV");
-            } else {
-                // Sopra l'unità, usiamo il float con 2 decimali
-                tft_print_float(ch->volts_div, 2); 
-                tft_Print("V");
-            }
+
+        float vdiv = ch->volts_div * ch->multiplier; // Applichiamo il moltiplicatore della sonda al valore di V/div
+        
+        if (vdiv < 1.0f) {
+            // Sotto l'unità, meglio mostrare i mV come intero
+            tft_Print_int16((int16_t)(vdiv * 1000));
+            tft_Print("mV");
+        } else {
+            // Sopra l'unità, usiamo il float con 2 decimali
+            tft_print_float(vdiv, 2); 
+            tft_Print("V");
         }
+        
         tft_Print(" ");
         
         // Stampa Accoppiamento
@@ -956,37 +1068,78 @@ void update_status_bar(bool force) {
         last_ui_state = current_state;
     }
 
-    // --- CANALE 1 ---
-   /* if(old_ch1_vdiv_idx != ch1_vdiv_idx || old_ch_coupling[0] != ch_coupling[0] || force){
-        tft_fillRect(xStart, yPos, 100, 16, BLACK);
-        setTextColor(CYAN, BLACK);
-        tft_set_cursor(xStart, yPos);
-        tft_Print("CH1: ");
-        tft_Print(v_div_labels[ch1_vdiv_idx]); // es. "1V"
-        tft_Print(" ");
-        tft_Print(ch_coupling[0] ? "AC" : "DC");
-        old_ch1_vdiv_idx = ch1_vdiv_idx;
-        old_ch_coupling[0] = ch_coupling[0];
-    }
-
-    // --- CANALE 2 ---
-    if(old_ch2_vdiv_idx != ch2_vdiv_idx || old_ch_coupling[1] != ch_coupling[1] || force){
-        tft_fillRect(xStart + 100, yPos, 100, 16, BLACK);
-        setTextColor(YELLOW, BLACK);
-        tft_set_cursor(xStart + 100, yPos);
-        tft_Print("CH2: ");
-        tft_Print(v_div_labels[ch2_vdiv_idx]);
-        tft_Print(" ");
-        tft_Print(ch_coupling[1] ? "AC" : "DC");
-        old_ch2_vdiv_idx = ch2_vdiv_idx;
-        old_ch_coupling[1] = ch_coupling[1];
-    }*/
-
     // Aggiorna info CH1
     draw_channel_status(&ch1, xStart, yPos, force);
 
     // Aggiorna info CH2 (spostato di 100 pixel a destra)
     draw_channel_status(&ch2, xStart + 120, yPos, force);
+
+    
+
+    if (misure->active) {
+    // 1. Gestione BACKGROUND (solo se cambia il menu, la sorgente o se forzato)
+    if (old_meas_active != misure->active || old_meas_type != misure->type || 
+        old_meas_source != misure->source || force) {
+        
+        old_meas_active = misure->active;
+        old_meas_type = misure->type;
+        old_meas_source = misure->source;
+
+        // Pulisci l'intera riga delle misure una volta sola
+        tft_fillRect(xStart, yPos + 20, 240, 16, BLACK); 
+    }
+
+    // 2. AGGIORNAMENTO DATI (Sempre, finché active è true)
+    switch (misure->source) {
+        case 1: // CH A
+            tft_set_cursor(xStart, yPos + 20);
+            setTextColor(ch1.color, BLACK); 
+
+            if (misure->type == 0) {
+                tft_print_float(misure->vpp, 1); 
+                tft_Print("Vpp ");
+            }
+            else if (misure->type == 1) {
+                tft_print_float(misure->vavg, 2); 
+                tft_Print("Vavg");
+            }
+            else if (misure->type == 2) {
+                tft_print_float(misure->vrms, 2); 
+                tft_Print("Vrms");
+            }
+            break;
+
+        case 2: // CH B
+            tft_set_cursor(xStart + 120, yPos + 20);
+            setTextColor(ch2.color, BLACK); 
+
+            if (misure->type == 0) {
+                tft_print_float(misure->vpp, 2); 
+                tft_Print("Vpp ");
+            }
+            else if (misure->type == 1) {
+                tft_print_float(misure->vavg, 2); 
+                tft_Print("Vavg");
+            }
+            else if (misure->type == 2) {
+                tft_print_float(misure->vrms, 2); 
+                tft_Print("Vrms");
+            }
+            break;
+    }
+} 
+else {
+    // 3. LOGICA DI CANCELLAZIONE ALLA DISATTIVAZIONE
+    // Se lo stato è appena passato da attivo a non attivo
+    if (old_meas_active != 0) {
+        // Cancella l'area delle misure (sia CH A che CH B)
+        tft_fillRect(xStart, yPos + 20, 240, 16, BLACK);
+        
+        // Aggiorna lo stato precedente così non cancella più al prossimo ciclo
+        old_meas_active = 0;
+    }
+}
+    
 
     // --- BASE TEMPI ---
     if(old_current_time_base_idx != current_time_base_idx || force){
@@ -1013,12 +1166,18 @@ void update_status_bar(bool force) {
         old_trigger_level_12bit = trigger_level_12bit;
     }
     // Supponiamo di aver calcolato 'freq'
+    if(misure->f_active == 1) {
     float freq = read_fpga_frequency();
-    if(old_freq != freq){
-        tft_set_cursor(MARGIN_X + 230, yPos + 20); // Una riga sotto la T/div
+    
+    // Aggiorniamo a video solo se la frequenza cambia o se abbiamo appena attivato la misura
+    if(old_freq != freq || old_f_active == 0) {
+        tft_set_cursor(MARGIN_X + 230, yPos + 20); 
         setTextColor(WHITE, BLACK);
-        tft_Print("F:");
         
+        // Pulizia locale prima di scrivere il nuovo valore (opzionale se tft_Print sovrascrive bene)
+        // tft_fillRect(MARGIN_X + 230, yPos + 20, 80, 10, BLACK); 
+
+        tft_Print("F:");
         if (freq > 1000000) {
             tft_print_float(freq / 1000000.0, 2);
             tft_Print("MHz");
@@ -1027,9 +1186,23 @@ void update_status_bar(bool force) {
             tft_Print("kHz");
         } else {
             tft_print_float(freq, 1);
-            tft_Print("Hz");
+            tft_Print("Hz "); // Spazio finale per pulire eventuali residui di cifre precedenti
         }
+        
+        old_freq = freq;
+        old_f_active = 1; // Ricordiamo che era attivo
     }
+} 
+else {
+    // --- LOGICA DI CANCELLAZIONE ---
+    // Se prima era attivo e ora è 0, cancelliamo la scritta una volta sola
+    if(old_f_active == 1) {
+        // Regola le coordinate e le dimensioni in base a dove appare la scritta
+        tft_fillRect(MARGIN_X + 230, yPos + 20, 90, 20, BLACK); 
+        old_f_active = 0;
+        old_freq = -1.0; // Reset della frequenza per forzare il refresh alla prossima riaccensione
+    }
+}
 }
 
 void write_encoder(uint8_t encoder_idx, int16_t value) {
@@ -1213,7 +1386,11 @@ void scope_main(void)
     set_base_time(11);
     set_trigger_level(trigger_level_12bit);   
     set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
-
+    
+    misure->source = 1; // Default su CH1
+    misure->type = 0;   // Default su Vpp
+    misure->active = 0;
+    misure->f_active = 0;
 
    while(1)
     {
@@ -1275,8 +1452,8 @@ void scope_main(void)
                     currentMenu = MENU_TRIG;
                     updateSidebarLabels(); 
                     break;
-                case 21: // Ipotetico tasto fisico "T/Div"
-                    currentMenu = MENU_TBASE;
+                case 01: // Ipotetico tasto fisico "Measure"
+                    currentMenu = MENU_MEAS;
                     updateSidebarLabels(); 
                     break;
                 case KEY_CH1: // Tasto fisico "Vertical CH1"
@@ -1313,6 +1490,7 @@ void scope_main(void)
                             break;
                         case 3:  // Tasto 3 
                             cycleProbe(&ch1);
+                            last_enc1 = -1; // Forziamo il reset dell'encoder per evitare problemi di sincronizzazione quando si torna a CH1 dopo aver cambiato canale
                             break;
 
                         case 0:  // Tasto 4 
@@ -1335,10 +1513,40 @@ void scope_main(void)
                             break;
                         case 3:  // Tasto 3 
                             cycleProbe(&ch2);
+                            last_enc2 = -1; // Forziamo il reset dell'encoder per evitare problemi di sincronizzazione quando si torna a CH2 dopo aver cambiato canale
                             break;
 
                         case 0:  // Tasto 4 
                             toggleInvert(&ch2);
+                            break;
+
+                    }
+                    break;
+                case MENU_MEAS:
+                    switch (ev) {
+                        case 12: // Tasto 1 (Top) -> Sorgente (CH1 / CH2)
+                            misure->source++;
+                            if (misure->source > 2) misure->source = 1;
+                            updateSidebarLabels();
+                            break;
+
+                        case 9:  // Tasto 2 
+                            misure->type++;
+                            if (misure->type > 2) misure->type = 0;
+                            updateSidebarLabels();
+                            break;
+                        case 6:  // Tasto 3 
+                            misure->active = !misure->active;
+                            updateSidebarLabels();
+                            break;
+                        case 3:  // Tasto 3 
+                            misure->f_active = !misure->f_active;
+                            updateSidebarLabels();
+                            break;
+                            break;
+
+                        case 0:  // Tasto 4 
+                            
                             break;
 
                     }
@@ -1365,16 +1573,16 @@ void scope_main(void)
                             updateSidebarLabels();
                             break;
 
-                        case 3:  // Tasto 4 -> Attiva Encoder per il LEVEL
+                        case 3:  // Tasto 4
                             //toggleTrigLevelMode();
                             //updateSidebarLabels();
                             break;
 
-                        case 0:  // Tasto 5 (Bottom) -> EXIT
+                        case 0:  // Tasto 5 
                             //currentMenu = MENU_NONE; // O torna al menu precedente
                             //drawStaticInterface();   // Ridisegna tutto per pulire la sidebar
                             
-                            updateSidebarLabels();
+                            //updateSidebarLabels();
                             break;
                     }
                     break;

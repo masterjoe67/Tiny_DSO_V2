@@ -42,7 +42,7 @@
 #define MENU_CH1        1
 #define MENU_CH2        2
 #define MENU_TRIG       3
-#define MENU_TBASE      4
+#define MENU_MEAS       4
 #define MENU_PAN        5
 
 #define COUPL_DC  0
@@ -123,17 +123,26 @@ typedef struct {
     uint8_t probe;       // Tipo di sonda (1X, 10X, 100X)
     uint8_t bw_limit;  // 0: Full BW, 1: 20MHz Limit
     float multiplier;    // Fattore di moltiplicazione per calcolare la tensione reale
+    float old_multiplier; // Per rilevare cambiamenti e aggiornare a schermo
     uint8_t isFine;
     uint16_t old_offset;
     uint16_t color;        // Colore della traccia
     Point_t gnd_mark_a;
     Point_t gnd_mark_b;
     Point_t gnd_mark_c;
-    
-    
+
 } Channel;
 
-
+typedef struct {
+    float vpp;    // Volt Picco-Picco (in LSB o mV)
+    float vavg;   // Valore Medio
+    float vrms;   // True RMS
+    float freq;   // Frequenza in Hz
+    uint8_t active;
+    uint8_t f_active;
+    uint8_t source;
+    uint8_t type;
+} ScopeMeasures;
 
 typedef enum {
     UI_STATUS_STOP = 0,
@@ -170,6 +179,8 @@ typedef enum {
     T_DIV  = 0,
     PAN = 1
 } tdiv_pan_t;
+
+
 
 
 void updateSidebarLabels(void);
