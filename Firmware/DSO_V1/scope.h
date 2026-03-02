@@ -20,6 +20,34 @@
 #define BRAM_START_ADDR 0x4000
 #define BRAM_DATA_PTR   ((volatile uint8_t *)0x4000)
 
+// Indirizzi base del Co-Processore
+// --- CONFIGURAZIONE CANALE 1 ---
+#define REG_CH1_SCALE_L   0x4010  // Scrittura: Scala bit 7-0
+#define REG_CH1_SCALE_H   0x4011  // Scrittura: Scala bit 15-8
+#define REG_CH1_OFFSET_L  0x4012  // Scrittura: Offset bit 7-0
+#define REG_CH1_OFFSET_H  0x4013  // Scrittura: Offset bit 15-8
+
+// --- CONFIGURAZIONE CANALE 2 ---
+#define REG_CH2_SCALE_L   0x4014  // Scrittura: Scala bit 7-0
+#define REG_CH2_SCALE_H   0x4015  // Scrittura: Scala bit 15-8
+#define REG_CH2_OFFSET_L  0x4016  // Scrittura: Offset bit 7-0
+#define REG_CH2_OFFSET_H  0x4017  // Scrittura: Offset bit 15-8
+
+// --- INPUT ADC E TRIGGER CALCOLO ---
+#define REG_CH1_ADC_L     0x4018  // Scrittura: Byte basso ADC (Parcheggio)
+#define REG_CH1_ADC_H     0x4019  // Scrittura: Byte alto ADC (Trigger Calcolo CH1)
+#define REG_CH2_ADC_L     0x401A  // Scrittura: Byte basso ADC (Parcheggio)
+#define REG_CH2_ADC_H     0x401B  // Scrittura: Byte alto ADC (Trigger Calcolo CH2)
+
+// --- RISULTATO CALCOLO (LETTURA) ---
+#define REG_Y_RESULT_L    0x401C  // Lettura: y_result bit 7-0
+#define REG_Y_RESULT_H    0x401D  // Lettura: y_result bit 15-8
+
+#define REG_TRIG_HYST    0x401E  // Scrittura: Trigger Hysteresis (0-255, in LSB)
+
+#define XRAM_WRITE(addr, val) (*(volatile uint8_t *)(addr) = (val))
+#define XRAM_READ(addr) (*(volatile uint8_t *)(addr))
+
 #define TRIG_CTRL_BIT  7         // il bit che sblocca wr_ptr
 
 
@@ -180,7 +208,11 @@ typedef enum {
     PAN = 1
 } tdiv_pan_t;
 
-
+// Stati possibili per l'encoder del trigger
+typedef enum {
+    ENC_MODE_TRIGGER_LEVEL,
+    ENC_MODE_HYSTERESIS
+} EncoderMode;
 
 
 void updateSidebarLabels(void);

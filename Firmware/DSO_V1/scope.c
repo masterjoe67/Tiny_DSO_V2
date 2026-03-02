@@ -38,12 +38,14 @@ Channel ch1, ch2;
 uint8_t time_div_sel = 10;
 uint8_t prev_time_div_sel = 0xFF; // valore precedente (inesistente all'inizio)
 uint16_t prev_trigger_level = 0xFFFF; // valore precedente (inesistente all'inizio)
+int16_t prev_enc_trig_val = 0xFFFF;
 int16_t view_offset = 0;
 int16_t prev_view_offset = 0xFFFF;
 int16_t prev_det_sig = 0;
 bool freeze = false;
 bool pan_flag = false;
 bool time_div_sel_changed = true;
+uint8_t trigger_hysteresis = 0x20; // Valore di default per l'isteresi (in LSB, da 0 a 255)
 
 static trigger_mode_t trigger_mode = TRIG_MODE_AUTO;
 static trig_slope_t trigger_slope = TRIG_SLOPE_RISING;
@@ -63,6 +65,8 @@ uint16_t trigger_level_12bit = 0x07FF;
 
 static int16_t last_enc1 = 0;
 static int16_t last_enc2 = 0;
+
+EncoderMode current_enc_mode = ENC_MODE_TRIGGER_LEVEL;
 
 
 uint8_t current_time_base_idx = 0;
@@ -106,6 +110,37 @@ void draw_trigger_line(uint16_t level12, uint16_t color, bool erase);
 float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit);
 //int16_t calcolaYTraccia(Channel *ch, uint8_t valoreADC);
 int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_16bit);
+int16_t calcolaYTraccia2(Channel *ch, uint16_t valoreADC_16bit);
+
+
+// Da chiamare SOLO quando l'utente cambia V/div o Offset
+void aggiorna_parametri_hw(Channel *ch) {
+    // 1. Calcolo della Scala (moltiplicata per 2^16 per matchare lo shift FPGA)
+    // Se volts_div è 1V/div, f_scale sarà circa 16000.
+    float f_scale = (3.3f / 4095.0f / ch->volts_div) * 30.0f * 65536.0f;
+    
+    if (ch->inverted) f_scale = -f_scale;
+
+    int16_t hw_scale = (int16_t)f_scale;
+    int16_t hw_offset = (int16_t)ch->offset; // Supporta da -50 a +250
+
+    if (ch == &ch1) {
+        // --- CANALE 1 ---
+        XRAM_WRITE(REG_CH1_SCALE_L,  hw_scale & 0xFF);
+        XRAM_WRITE(REG_CH1_SCALE_H,  hw_scale >> 8);
+        XRAM_WRITE(REG_CH1_OFFSET_L, hw_offset & 0xFF);
+        XRAM_WRITE(REG_CH1_OFFSET_H, hw_offset >> 8);
+    } 
+    else {
+        // --- CANALE 2 ---
+        XRAM_WRITE(REG_CH2_SCALE_L,  hw_scale & 0xFF);
+        XRAM_WRITE(REG_CH2_SCALE_H,  hw_scale >> 8);
+        XRAM_WRITE(REG_CH2_OFFSET_L, hw_offset & 0xFF);
+        XRAM_WRITE(REG_CH2_OFFSET_H, hw_offset >> 8);
+    }
+}
+
+
 
 // Algoritmo Integer Square Root (veloce per AVR)
 uint32_t isqrt(uint32_t n) {
@@ -228,6 +263,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
         y_prev_old_a = old_buf_a[i];
 
         if (ch_a->enabled) {
+
             int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[i]);
             if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
                 if (vectors && i > 0 && y_prev_new_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
@@ -431,7 +467,7 @@ void drawPanTrack(){
 ** Description:             Converte il valore ADC in coordinata Y pixel basandosi
 ** sui parametri del canale (V/div, offset, invert).
 ***************************************************************************************/
-int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit) {
+int16_t calcolaYTraccia2(Channel *ch, uint16_t valoreADC_12bit) {
     // --- COSTANTI PER ADC A 12 BIT ---
     const float ADC_MAX = 4095.0f;
     const float ADC_ZERO = 2048.0f; // Metà scala per accoppiamento AC/Dual
@@ -456,6 +492,25 @@ int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit) {
     // ch->offset è la posizione della linea dello zero scelta dall'utente sul TFT
     return ch->offset - pixelSpostamento;
 }
+
+int16_t calcolaYTraccia(Channel *ch, uint16_t adc_raw_12bit) {
+
+    if (ch == &ch1) {
+        // Scriviamo l'ADC per scatenare il calcolo nel VHDL
+        XRAM_WRITE(REG_CH1_ADC_L, (uint8_t)(adc_raw_12bit & 0xFF));
+        XRAM_WRITE(REG_CH1_ADC_H, (uint8_t)((adc_raw_12bit >> 8) & 0x0F));
+    } else {
+        XRAM_WRITE(REG_CH2_ADC_L, (uint8_t)(adc_raw_12bit & 0xFF));
+        XRAM_WRITE(REG_CH2_ADC_H, (uint8_t)((adc_raw_12bit >> 8) & 0x0F));
+    }
+
+    // Leggiamo il risultato a 16 bit calcolato dall'FPGA
+    uint8_t low  = XRAM_READ(REG_Y_RESULT_L);
+    uint8_t high = XRAM_READ(REG_Y_RESULT_H);
+    
+    return (int16_t)((high << 8) | low);
+}
+
 
 void draw_ground_marker(Channel *ch) {
     // 1. La posizione Y dello zero è data direttamente dal valore di ch->offset
@@ -692,8 +747,21 @@ float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit) {
     return (float)tensioneIngresso * (float)ch->multiplier;
 }
 
+void set_trig_enc_default()
+{
+    current_enc_mode = ENC_MODE_TRIGGER_LEVEL;
+    configure_encoder(5, PARAM_MIN, TRIG_MIN);
+    configure_encoder(5, PARAM_MAX, TRIG_MAX);
+    configure_encoder(5, PARAM_STEP, TRIG_STEP);
+    configure_encoder(5, PARAM_C_VAL, trigger_level_12bit);
+}
 
+uint8_t oldMenu = 0xFF; // Valore iniziale invalido per forzare l'aggiornamento al primo ciclo
 void updateSidebarLabels() {
+    if(currentMenu != oldMenu) {
+        set_trig_enc_default();
+        oldMenu = currentMenu;
+    }
     // --- 1. AGGIORNAMENTO NOME MENU NELLA BARRA SUPERIORE ---
     const char* menuTitle;
     uint16_t menuColor; // Variabile per il colore del titolo
@@ -764,20 +832,29 @@ void updateSidebarLabels() {
     }
     
     else if (currentMenu == MENU_TRIG) {
-        // TASTO 0: Modalità (AUTO/NORMAL) - Usiamo i nuovi nomi
-        //(0, (trigger_mode == 0) ? "AUTO  " : "NORM  ", true, WHITE);
-        drawMenuButton(0, "Source", (trigger_source == 1) ? "CH1" : "CH2", true, WHITE);
-        // TASTO 1: Slope (RISE/FALL) - Usiamo i nuovi nomi
-        //(1, (trigger_slope == 1) ? "RISE" : "FALL", true, WHITE);
-        drawMenuButton(1, "Slope", trigger_slope ? "RISE" : "FALL", true, WHITE);
-        // TASTO 2: Sorgente (CH1/CH2) - Usiamo i nuovi nomi
-        //drawMenuButton(2, (trigger_source == 1) ? "SRC: CH1" : "SRC: CH2", true, WHITE);
-        drawMenuButton(2, "Mode", (trigger_mode == 0) ? "AUTO" : "NORM", true, WHITE);
-        // TASTO 3: 
-        drawMenuButton(3, "", "", true, WHITE);
-        drawMenuButton(4, "", "", true, WHITE);
+    // TASTO 0: Sorgente (CH1/CH2)
+    drawMenuButton(0, "Source", (trigger_source == 1) ? "CH1" : "CH2", true, WHITE);
+
+    // TASTO 1: Slope (RISE/FALL)
+    drawMenuButton(1, "Slope", (trigger_slope == 1) ? "RISE" : "FALL", true, WHITE);
+
+    // TASTO 2: Modalità (AUTO/NORMAL)
+    drawMenuButton(2, "Mode", (trigger_mode == 0) ? "AUTO" : "NORM", true, WHITE);
+
+    // TASTO 3: Funzione Encoder (Level / Hysteresis)
+    // Se l'encoder è in modalità Hysteresis, evidenziamo il tasto o cambiamo testo
+    char hyst_str[8];
+    sprintf(hyst_str, "%u", (unsigned int)trigger_hysteresis);
+    if (current_enc_mode == ENC_MODE_HYSTERESIS) {
         
+        drawMenuButton(3, "Hyst:", hyst_str, true, YELLOW); // Cambia colore per attirare l'attenzione
+    } else {
+        drawMenuButton(3, "Hyst:", hyst_str, true, WHITE);
     }
+
+    // TASTO 4: Libero (o magari un Reset Trigger)
+    drawMenuButton(4, "", "", true, WHITE);
+}
     else if (currentMenu == MENU_MEAS) {
         drawMenuButton(0, "Source", (misure->source == 1) ? "CH1" : "CH2", true, WHITE);
 
@@ -1372,6 +1449,12 @@ void updateChannelVoltDiv(Channel *ch, int16_t current_enc, int16_t *last_enc) {
         uart_print("\r\n");*/
 }
 
+void scope_set_hysteresis(uint8_t value) {
+    // Valore tipico: 10-50. 
+    // Se il segnale è sporco, alza questo valore.
+    XRAM_WRITE(REG_TRIG_HYST, value);
+}
+
 // --- main loop ---
 void scope_main(void)
 {
@@ -1391,6 +1474,11 @@ void scope_main(void)
     misure->type = 0;   // Default su Vpp
     misure->active = 0;
     misure->f_active = 0;
+
+    aggiorna_parametri_hw(&ch1);
+    aggiorna_parametri_hw(&ch2);
+
+    scope_set_hysteresis(20); // Imposta un valore di default per l'isteresi
 
    while(1)
     {
@@ -1469,7 +1557,19 @@ void scope_main(void)
                     write_encoder(2, OFFSET_Y2_C_VAL); // Reset posizione Y CH2
                     break;
                 case 17: // Tasto encoder per il livello di trigger
-                    write_encoder(5, TRIG_C_VAL); // Reset base dei tempi
+                  
+                    if (current_enc_mode == ENC_MODE_HYSTERESIS) {
+                        // RESET ISTERESI al valore di default (es. 20)
+                        trigger_hysteresis = 20; 
+                        scope_set_hysteresis(trigger_hysteresis);
+                        
+                        // Sincronizziamo il valore interno dell'encoder
+                        configure_encoder(5, PARAM_C_VAL, trigger_hysteresis); 
+                        
+                    } 
+                    else {
+                        write_encoder(5, TRIG_C_VAL);
+                    }
                     break;
                 case 18: // Tasto encoder per il PAN
                     write_encoder(6, 0); // Reset livello di trigger
@@ -1574,8 +1674,17 @@ void scope_main(void)
                             break;
 
                         case 3:  // Tasto 4
-                            //toggleTrigLevelMode();
-                            //updateSidebarLabels();
+                            if (current_enc_mode == ENC_MODE_TRIGGER_LEVEL) {
+                                current_enc_mode = ENC_MODE_HYSTERESIS;
+                                // Opzionale: pre-carica l'encoder con il valore attuale dell'isteresi
+                                configure_encoder(5, PARAM_MIN, 0);
+                                configure_encoder(5, PARAM_MAX, 255);
+                                configure_encoder(5, PARAM_STEP, 1);
+                                configure_encoder(5, PARAM_C_VAL, trigger_hysteresis);
+                            } else {
+                                set_trig_enc_default();
+                            }
+                            updateSidebarLabels();
                             break;
 
                         case 0:  // Tasto 5 
@@ -1607,7 +1716,7 @@ void scope_main(void)
         updateSidebarLabels(); 
     }
 
-    new_trigger_level = encoder_values[5];
+    /*new_trigger_level = encoder_values[5];
     if (new_trigger_level != prev_trigger_level) {
         // Aggiorna
         trigger_level_12bit = new_trigger_level;
@@ -1616,7 +1725,29 @@ void scope_main(void)
         
         // Aggiorna la scritta della tensione in alto
         updateSidebarLabels(); 
+    }*/
+
+    int16_t new_val = encoder_values[5];
+
+if (new_val != prev_enc_trig_val) {
+    if (current_enc_mode == ENC_MODE_HYSTERESIS) {
+        // --- MODALITÀ ISTERESI ---
+        // Limitiamo l'isteresi tra 1 e 255 per sicurezza
+        if (new_val < 1) new_val = 1;
+        if (new_val > 255) new_val = 255;
+        
+        trigger_hysteresis = (uint8_t)new_val;
+        scope_set_hysteresis(trigger_hysteresis);
+        updateSidebarLabels(); // Aggiorna i testi a video (Livello o Hyst)
+    } else {
+        // --- MODALITÀ LIVELLO TRIGGER (Normale) ---
+        trigger_level_12bit = new_val;
+        set_trigger_level(trigger_level_12bit);
     }
+
+    prev_enc_trig_val = new_val;
+    //updateSidebarLabels(); // Aggiorna i testi a video (Livello o Hyst)
+}
 
     int16_t new_pan = encoder_values[6];
     if (new_pan != prev_view_offset) {
@@ -1634,11 +1765,7 @@ void scope_main(void)
 
     ch1.offset = encoder_values[0]; // Aggiorna posizione Y CH1
     ch2.offset = encoder_values[2]; //
-    //y_offset_ch[0] = encoder_values[0]; // Aggiorna posizione Y CH1
-    //y_offset_ch[1] = encoder_values[2]; // Aggiorna posizione Y CH2
 
-    //ch1.vdiv_idx = encoder_values[1]; // Aggiorna Volt/Div CH1
-    //ch2.vdiv_idx = encoder_values[3]; // Aggiorna Volt/Div
 
     // Aggiorna Canale 1 (usa encoder_values[1])
     updateChannelVoltDiv(&ch1, encoder_values[1], &last_enc1);
@@ -1646,42 +1773,12 @@ void scope_main(void)
     // Aggiorna Canale 2 (usa encoder_values[2] - o quello che hai assegnato)
     updateChannelVoltDiv(&ch2, encoder_values[3], &last_enc2);
 
-    // 1. Leggiamo il valore attuale dell'encoder dedicato al verticale (es. encoder_values[1])
-/*int16_t current_enc_v = encoder_values[1];
-static int16_t last_enc_v = 0; // Serve per capire se l'encoder si è mosso
-
-if (current_enc_v != last_enc_v) {
-    // Determiniamo la direzione del movimento
-    int8_t dir = (current_enc_v > last_enc_v) ? 1 : -1;
-    last_enc_v = current_enc_v;
-
-    if (!ch1.isFine) {
-        // --- MODALITÀ COARSE (Step 1-2-5) ---
-        int8_t new_idx = ch1.vdiv_idx + dir;
-        
-        // Limiti dell'array v_div_values (0-9)
-        if (new_idx >= 0 && new_idx < 10) {
-            ch1.vdiv_idx = new_idx;
-            ch1.volts_div = v_div_values[ch1.vdiv_idx];
-            // Qui potresti chiamare una funzione per ridisegnare solo l'etichetta nel menu
-        }
-    } 
-    else {
-        // --- MODALITÀ FINE (Variazione continua) ---
-        // Aumentiamo o diminuiamo del 5% o di un valore fisso (es. 0.001)
-        float step = ch1.volts_div * 0.05f; // Variazione del 5% per ogni scatto
-        ch1.volts_div += (dir * step);
-
-        // Limiti di sicurezza per il modo Fine (es. tra 10mV e 10V)
-        if (ch1.volts_div < 0.01f) ch1.volts_div = 0.01f;
-        if (ch1.volts_div > 10.0f) ch1.volts_div = 10.0f;
-    }
-}*/
+   
 
     acquire_and_draw();
     update_status_bar(false);
-        
-
+    aggiorna_parametri_hw(&ch1);
+    aggiorna_parametri_hw(&ch2);
     
     }
 }

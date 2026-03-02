@@ -35,6 +35,8 @@ entity oscilloscope_top is
 		  bram_ce          : in  std_logic;
 		  mem_ramadr		 : in std_logic_vector(15 downto 0);
 		  ramre				 : in  std_logic;
+		  ramwe				 : in  std_logic;
+		  data_in			 : in std_logic_vector(7 downto 0);
 		  data_out			 : out std_logic_vector(7 downto 0)
 		  
 
@@ -158,6 +160,8 @@ constant time_div_map : time_div_map_t := (
     signal auto_timeout_hit      : std_logic;
     signal trig_occurred         : std_logic := '0';
     signal trig_armed            : std_logic := '0';
+	 
+	 signal reg_trig_hyst : unsigned(11 downto 0) := to_unsigned(20, 12); -- Default 20
 
     -- ADC samples
     signal trig_sample           : unsigned(11 downto 0);
@@ -216,6 +220,25 @@ constant time_div_map : time_div_map_t := (
 	signal last_ramre : std_logic;
 	signal ctrl_reset_index : std_logic := '0';
 	signal rst_cmd_sel : std_logic := '0';
+	
+-- Segnali di appoggio coprocessore
+    signal scale_ch1, scale_ch2   : signed(15 downto 0) := (others => '0');
+    signal offset_ch1, offset_ch2 : signed(15 downto 0) := (others => '0');
+    signal adc_temp_l             : std_logic_vector(7 downto 0);
+    signal y_result               : signed(15 downto 0) := (others => '0');
+    signal adc_full_12bit         : signed(15 downto 0);
+
+    -- Attributi per visibilità Signal Tap
+    attribute keep : boolean;
+    attribute noprune: boolean;
+    
+    attribute keep of offset_ch1, offset_ch2 : signal is true;
+    attribute noprune of offset_ch1, offset_ch2 : signal is true;
+    attribute keep of adc_temp_l, y_result : signal is true;
+    attribute noprune of adc_temp_l, y_result : signal is true;
+    attribute keep of scale_ch1, scale_ch2 : signal is true;
+    attribute noprune of scale_ch1, scale_ch2 : signal is true;
+    attribute noprune of adc_full_12bit : signal is true;
     ------------------------------------------------------------------
     -- Utility function
     ------------------------------------------------------------------
@@ -242,6 +265,56 @@ begin
     trig_ctrl_sel <= '1' when (mmio_addr = REG_TG_CTRL   and mmio_we = '1') else '0';
     trig_cmd_sel  <= '1' when (mmio_addr = REG_TRIG  and mmio_we = '1') else '0';
 	 rst_cmd_sel  <= '1' when (mmio_addr = REG_RESET_INDEX  and mmio_we = '1') else '0';
+	 
+	 
+	 
+	 -- Coprocessore
+
+	
+	-- Processo di scrittura dal BUS (AVR -> FPGA)
+process(clk)
+    variable v_adc   : signed(15 downto 0);
+    variable v_mult  : signed(31 downto 0);
+begin
+    if rising_edge(clk) then
+        if (ramwe = '1') then
+            case mem_ramadr is
+                -- CONFIGURAZIONE CH1 (0x4010 - 0x4013)
+                when x"4010" => scale_ch1(7 downto 0)  <= signed(data_in);
+                when x"4011" => scale_ch1(15 downto 8) <= signed(data_in);
+                when x"4012" => offset_ch1(7 downto 0) <= signed(data_in);
+                when x"4013" => offset_ch1(15 downto 8)<= signed(data_in);
+
+                -- CONFIGURAZIONE CH2 (0x4014 - 0x4017)
+                when x"4014" => scale_ch2(7 downto 0)  <= signed(data_in);
+                when x"4015" => scale_ch2(15 downto 8) <= signed(data_in);
+                when x"4016" => offset_ch2(7 downto 0) <= signed(data_in);
+                when x"4017" => offset_ch2(15 downto 8)<= signed(data_in);
+
+                -- ACQUISIZIONE E CALCOLO (0x4018 - 0x401B)
+                when x"4018" => 
+                    adc_temp_l <= data_in; -- LSB CH1
+                
+                when x"4019" => -- MSB CH1 + TRIGGER CALCOLO CH1
+                    adc_full_12bit <= signed(std_logic_vector'(x"0" & data_in(3 downto 0) & adc_temp_l));
+                    v_adc  := signed(std_logic_vector'(x"0" & data_in(3 downto 0) & adc_temp_l)) - 2048;
+                    v_mult := v_adc * scale_ch1;
+                    y_result <= offset_ch1 - resize(v_mult(31 downto 16), 16);
+
+                when x"401A" => 
+                    adc_temp_l <= data_in; -- LSB CH2
+                
+                when x"401B" => -- MSB CH2 + TRIGGER CALCOLO CH2
+                    v_adc  := signed(std_logic_vector'(x"0" & data_in(3 downto 0) & adc_temp_l)) - 2048;
+                    v_mult := v_adc * scale_ch2;
+                    y_result <= offset_ch2 - resize(v_mult(31 downto 16), 16);
+					 when x"401E" => 
+						  reg_trig_hyst <= resize(unsigned(data_in), 12); -- Carica l'isteresi da C
+                when others => null;
+            end case;
+        end if;
+    end if;
+end process;
 
     ------------------------------------------------------------------
     -- Read index calculation
@@ -339,7 +412,7 @@ begin
         if trig_enable = '1' then
             -- RISING EDGE
             if trig_edge = '0' then 
-                if unsigned(trig_sample_sync) < (unsigned(trig_level) - HYST) then
+                if unsigned(trig_sample_sync) < (unsigned(trig_level) - reg_trig_hyst) then
                     v_trig_armed <= '1';
                 elsif v_trig_armed = '1' and (trig_prev_val < unsigned(trig_level)) 
                                          and (unsigned(trig_sample_sync) >= unsigned(trig_level)) then
@@ -348,7 +421,7 @@ begin
                 end if;
             -- FALLING EDGE
             else 
-                if unsigned(trig_sample_sync) > (unsigned(trig_level) + HYST) then
+                if unsigned(trig_sample_sync) > (unsigned(trig_level) + reg_trig_hyst) then
                     v_trig_armed <= '1';
                 elsif v_trig_armed = '1' and (trig_prev_val > unsigned(trig_level)) 
                                          and (unsigned(trig_sample_sync) <= unsigned(trig_level)) then
@@ -546,156 +619,30 @@ end process;
         );
 		  
 		  
-process(mem_ramadr, ram_a_out, ram_b_out, bram_ce)
+process(mem_ramadr, ram_a_out, ram_b_out, bram_ce, y_result)
 begin
-    -- Valore di default per evitare latch indesiderati
+    -- Reset di default per evitare latch indesiderati
     bram_data_to_avr <= (others => '0');
     
     if bram_ce = '1' then
-        case mem_ramadr(1 downto 0) is
-            when "00" => -- CH1 LOW
-                bram_data_to_avr <= std_logic_vector(ram_a_out(7 downto 0));
+        case mem_ramadr is
+            -- Lettura BRAM (Originale)
+            when x"4000" => bram_data_to_avr <= std_logic_vector(ram_a_out(7 downto 0));
+            when x"4001" => bram_data_to_avr <= "0000" & std_logic_vector(ram_a_out(11 downto 8));
+            when x"4002" => bram_data_to_avr <= std_logic_vector(ram_b_out(7 downto 0));
+            when x"4003" => bram_data_to_avr <= "0000" & std_logic_vector(ram_b_out(11 downto 8));
             
-            when "01" => -- CH1 HIGH
-                bram_data_to_avr <= "0000" & std_logic_vector(ram_a_out(11 downto 8));
-            
-            when "10" => -- CH2 LOW
-                bram_data_to_avr <= std_logic_vector(ram_b_out(7 downto 0));
-            
-            when "11" => -- CH2 HIGH
-                bram_data_to_avr <= "0000" & std_logic_vector(ram_b_out(11 downto 8));
+            -- Lettura Y_RESULT (16 bit divisi in due letture)
+            when x"401C" => bram_data_to_avr <= std_logic_vector(y_result(7 downto 0));
+            when x"401D" => bram_data_to_avr <= std_logic_vector(y_result(15 downto 8));
             
             when others => null;
         end case;
     end if;
 end process;
-
 ------------------------------------------------------------------
 -- MMIO write logic - Versione Corretta
 ------------------------------------------------------------------
---process(clk, rst_n)
---begin
---    if rst_n = '0' then
---        reg_index_int    <= (others => '0');
---        reg_trig_level   <= to_unsigned(512, 12);
---        reg_trig_ctrl    <= (others => '0');
---        base_bytecnt     <= (others => '0');
---        base_shift       <= (others => '0');
---        trig_shift       <= (others => '0');
---        trig_bytecnt     <= (others => '0');
---        reg_base_time    <= to_unsigned(20000, 32);
---        wr_timeout       <= (others => '0');
---        reg_time_div_sel <= 0;
---        view_bytecnt     <= (others => '0');
---        view_offset      <= (others => '0');
---        view_shift       <= (others => '0');
---        view_full_raw    <= (others => '0');
---        base_cmd         <= '0';
---		  last_ramre 		 <= '1';
---
---    elsif rising_edge(clk) then
---		  last_ramre <= ramre;
---        if mmio_we = '1' then
---            wr_timeout <= to_unsigned(20000, wr_timeout'length);
---        elsif wr_timeout /= 0 then
---            wr_timeout <= wr_timeout - 1;
---        else
---            trig_bytecnt <= (others => '0');
---            base_bytecnt <= (others => '0');
---            view_bytecnt <= (others => '0'); 
---        end if;
---        
---		  if mmio_we = '1' and rst_cmd_sel = '1' then -- Indirizzo MMIO 0x00
---            ctrl_reset_index <= mmio_wdata(0); -- Usiamo il bit 0 per il reset
---        else
---            ctrl_reset_index <= '0'; -- Auto-reset del segnale (opzionale, vedi sotto)
---        end if;
---		  
---		  
---			if index_reg_sel = '1' and mmio_we = '1' then
---				 -- Scrittura manuale dall'AVR (es. per resettare a 0)
---				 reg_index_int <= "00" & unsigned(mmio_wdata);
---			elsif ramre = '0' and last_ramre = '1' then
---				 -- Solo se la BRAM è selezionata e siamo sull'ultimo byte (CH2_H)
---				 if bram_ce = '1' and mem_ramadr(1 downto 0) = "11" then
---					  if reg_index_int = 399 then -- Nota: 399 campioni per schermata
---							reg_index_int <= (others => '0');
---					  else
---							reg_index_int <= reg_index_int + 1;
---					  end if;
---				 end if;
---			end if;
---
----- Colleghiamo il reset_index_cmd al rearm dell'oscilloscopio
----- Così ogni volta che riarmi, il puntatore torna all'inizio automaticamente
-----ctrl_reset_index <= ctrl_reset_index;			 
---		  
---		  
---
---        if mmio_we = '1' and base_reg_sel = '1' then
---				-- *** PRIORITÀ 1: CONCLUSIONE CICLO (Stato 100) ***
---            -- Se siamo arrivati qui, view_full_raw ha già LSB e MSB salvati.
---            -- Questo ciclo di clock corrisponde al tuo "REG_BASETIME = 0xFF" finale.
---            if view_bytecnt = "100" then
---                -- ESEGUIAMO IL CALCOLO ORA!
---                -- view_full_raw è stabile da un ciclo, quindi niente errori.
---
---					 
---					 
---					 view_full_sign <= signed(view_full_raw);
---                view_offset <= resize(signed(view_full_raw), view_offset'length);
---                
---                -- Poiché l'ultimo byte è 0xFF (Escape), il prossimo stato logico
---                -- è "001" (siamo già in modalità comando), non "000".
---                view_bytecnt <= "000";
---				-- RICEZIONE DATI: Qui NON dobbiamo controllare x"FF"
---            elsif view_bytecnt = "010" then
---                view_full_raw(7 downto 0) <= mmio_wdata; -- Salva LSB
---                view_bytecnt <= "011";
---					 
---				elsif view_bytecnt = "011" then
---                view_full_raw(15 downto 8) <= mmio_wdata; -- Salva MSB (il tuo 0xFF!)
---                view_bytecnt <= "100";
---					 
---				-- COMANDI: Qui controlliamo x"FF" per iniziare la sequenza	 
---            elsif mmio_wdata = x"FF" then
---                view_bytecnt <= "001";
---
---            elsif view_bytecnt = "001" then
---                base_cmd     <= mmio_wdata(0);
---                view_bytecnt <= "010";
---					 
---			
---            else
---                reg_time_div_sel <= to_integer(unsigned(mmio_wdata(4 downto 0)));
---            end if;
---        end if;
---
---
---if mmio_we = '1' and trig_reg_sel = '1' then
---    if trig_bytecnt = "00" then 
---        trig_shift(7 downto 0) <= unsigned(mmio_wdata);
---    elsif trig_bytecnt = "01" then 
---        trig_shift(15 downto 8) <= unsigned(mmio_wdata);
---    elsif trig_bytecnt = "10" then
---        -- mmio_wdata qui non lo usiamo per il livello, 
---        -- ma serve a scatenare il caricamento finale
---        reg_trig_level <= trig_shift(11 downto 0); 
---    end if;
---
---    if trig_bytecnt = "10" then 
---        trig_bytecnt <= (others => '0');
---    else 
---        trig_bytecnt <= trig_bytecnt + 1; 
---    end if;
---end if;
---
---        if mmio_we = '1' and trig_ctrl_sel = '1' then
---            reg_trig_ctrl <= mmio_wdata;
---        end if;
---    end if;
---end process;
-
 process(clk, rst_n)
 begin
     if rst_n = '0' then
@@ -748,7 +695,7 @@ begin
         elsif ramre = '1' and last_ramre = '0' then
              -- Incremento alla FINE della lettura (Fronte di salita di ramre)
              -- Solo se siamo sull'ultimo byte del pacchetto (CH2_High -> "11")
-             if bram_ce = '1' and mem_ramadr(1 downto 0) = "11" then
+             if bram_ce = '1' and mem_ramadr(3 downto 0) = "0011" then
                   if reg_index_int = 399 then 
                       reg_index_int <= (others => '0');
                   else

@@ -786,6 +786,8 @@ scope_inst : entity work.oscilloscope_top
         out_en      => scope_reg_out_en,
 		  mem_ramadr  => mem_ramadr,
 		  ramre		  => mem_ramre,
+		  ramwe       => mem_ramwe,
+		  data_in     => mem_ram_dbus_in,
 		  data_out    => scope_bram_dout,
 		  bram_ce	  => bram_ce
 		  
