@@ -264,37 +264,46 @@ component FrqDiv is port(
 end component;
 
 
-component adc128s022_reader is
-    port (
-        clk     : in  std_logic;
-        rst_n   : in  std_logic;
-
-        -- SPI ADC
-        sclk    : out std_logic;
-        cs_n    : out std_logic;
-        mosi    : out std_logic;
-        miso    : in  std_logic;
-
-        -- Uscite dati
-        ch0   : out unsigned(11 downto 0);
-        ch1   : out unsigned(11 downto 0);
-        ch2   : out unsigned(11 downto 0)
-
-    );
-end component;
-
---component dp_ram_1024x12 is
+--component adc128s022_reader is
 --    port (
---        clk_wr   : in  std_logic;
---        addr_wr  : in  unsigned(9 downto 0);
---        data_in  : in  unsigned(11 downto 0);
---        wr_en    : in  std_logic;
+--        clk     : in  std_logic;
+--        rst_n   : in  std_logic;
 --
---        clk_rd   : in  std_logic;
---        addr_rd  : in  unsigned(9 downto 0);
---        data_out : out unsigned(11 downto 0)
+--        -- SPI ADC
+--        sclk    : out std_logic;
+--        cs_n    : out std_logic;
+--        mosi    : out std_logic;
+--        miso    : in  std_logic;
+--
+--        -- Uscite dati
+--        ch0   : out unsigned(11 downto 0);
+--        ch1   : out unsigned(11 downto 0);
+--        ch2   : out unsigned(11 downto 0)
+--
 --    );
 --end component;
+
+component dual_ad9226_reader is
+    port(
+        clk65       : in  std_logic;    -- Clock di campionamento (max 65 MHz)
+        rst_n       : in  std_logic;
+
+        -- Interfaccia Modulo ADC Canale A
+        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+        ACK         : out std_logic;                     -- Clock A
+        ORA         : in  std_logic;                     -- Out of Range A
+        
+        -- Interfaccia Modulo ADC Canale B
+        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+        BCK         : out std_logic;                     -- Clock B
+        ORB         : in  std_logic;                     -- Out of Range B
+
+        -- Registri in uscita 
+        ch_a_val    : out unsigned(11 downto 0);
+        ch_b_val    : out unsigned(11 downto 0);
+        overrange   : out std_logic_vector(1 downto 0)   -- [1]=ORB, [0]=ORA
+    );
+end component;
 
 component dp_ram_4096x12 is
     port (
@@ -317,10 +326,21 @@ component oscilloscope_top is
 		  clk_adc : in    std_logic;
         rst_n   : in  std_logic;
 
-        -- ADC
-        sclk    : out std_logic;
-        cs_n    : out std_logic;
-        miso    : in  std_logic;
+--        -- ADC
+--        sclk    : out std_logic;
+--        cs_n    : out std_logic;
+--        miso    : in  std_logic;
+		  
+		  -- Interfaccia Modulo ADC Canale A
+        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+        ACK         : out std_logic;                     -- Clock A
+        ORA         : in  std_logic;                     -- Out of Range A
+        
+        -- Interfaccia Modulo ADC Canale B
+        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+        BCK         : out std_logic;                     -- Clock B
+        ORB         : in  std_logic;                     -- Out of Range B
+
 
         -- MMIO
         iore        : in  std_logic;

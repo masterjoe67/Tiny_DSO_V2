@@ -15,12 +15,12 @@ entity dual_ad9226_reader is
         rst_n       : in  std_logic;
 
         -- Interfaccia Modulo ADC Canale A
-        A           : in  std_logic_vector(11 downto 0); -- A1..12
+        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
         ACK         : out std_logic;                     -- Clock A
         ORA         : in  std_logic;                     -- Out of Range A
         
         -- Interfaccia Modulo ADC Canale B
-        B           : in  std_logic_vector(11 downto 0); -- B1..12
+        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
         BCK         : out std_logic;                     -- Clock B
         ORB         : in  std_logic;                     -- Out of Range B
 
@@ -56,10 +56,10 @@ begin
             reg_b   <= (others => '0');
             reg_ora <= '0';
             reg_orb <= '0';
-        elsif rising_edge(clk65) then
+        elsif falling_edge(clk65) then
             -- Acquisizione dati e stati di errore
-            reg_a   <= unsigned(A);
-            reg_b   <= unsigned(B);
+            reg_a   <= unsigned(DATA_A);
+            reg_b   <= unsigned(DATA_B);
             reg_ora <= ORA;
             reg_orb <= ORB;
         end if;

@@ -264,7 +264,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
 
         if (ch_a->enabled) {
 
-            int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[i]);
+            int16_t y_now_a = calcolaYTraccia2(ch_a, ch1_buffer[i]);
             if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
                 if (vectors && i > 0 && y_prev_new_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_a, ch_a->color);
@@ -281,7 +281,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
         y_prev_old_b = old_buf_b[i];
 
         if (ch_b->enabled) {
-            int16_t y_now_b = calcolaYTraccia(ch_b, ch2_buffer[i]);
+            int16_t y_now_b = calcolaYTraccia2(ch_b, ch2_buffer[i]);
             if (y_now_b > Y_MIN && y_now_b < Y_MAX) {
                 if (vectors && i > 0 && y_prev_new_b > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_b, x, y_now_b, ch_b->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_b, ch_b->color);
@@ -480,7 +480,7 @@ int16_t calcolaYTraccia2(Channel *ch, uint16_t valoreADC_12bit) {
     // 2. Calcoliamo il fattore di scala totale
     // Questo trasforma il valore ADC direttamente in "pixel di spostamento"
     // Formula: (Delta / 4095 * 3.3V * Multiplier / VoltsDiv) * 30 pixel
-    float fattoreSpostamento = (deltaADC * 3.3f / ADC_MAX); // * ch->multiplier;
+    float fattoreSpostamento = (deltaADC * 2.0f / ADC_MAX); // * ch->multiplier;
     float divisioni = fattoreSpostamento / ch->volts_div;
     
     if (ch->inverted) divisioni = -divisioni;
@@ -491,6 +491,12 @@ int16_t calcolaYTraccia2(Channel *ch, uint16_t valoreADC_12bit) {
     // 4. POSIZIONE SULLO SCHERMO
     // ch->offset è la posizione della linea dello zero scelta dall'utente sul TFT
     return ch->offset - pixelSpostamento;
+}
+
+int16_t calcolaYTraccia3(Channel *ch, uint16_t adc_raw_12bit) {
+    // Forza il dato a rimanere positivo per un secondo per vedere se la forma è giusta
+    // Shiftiamo di 4 per portarlo a 16 bit se necessario alla tua routine di disegno
+    return (int16_t)((adc_raw_12bit - 2048) * 0.2f); 
 }
 
 int16_t calcolaYTraccia(Channel *ch, uint16_t adc_raw_12bit) {
@@ -1013,7 +1019,7 @@ float read_fpga_frequency() {
 
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     Channel *trig_ch = (trigger_source == 1) ? &ch1 : &ch2;
-    int16_t y = calcolaYTraccia(trig_ch, level12); 
+    int16_t y = calcolaYTraccia2(trig_ch, level12); 
     
     const uint16_t RIGHT_EDGE = MARGIN_X + TRACE_W - 1;
 

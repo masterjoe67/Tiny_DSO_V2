@@ -50,11 +50,21 @@ entity top_avr_core_v8 is port(
 	TDO    : out   std_logic;
 	TRSTn  : in    std_logic; -- Optional JTAG input
 	
-   --ADC SPI
-   ADC_sclk	    	: out   std_logic;
-	ADC_cs_n			: out   std_logic;
-	ADC_miso		   : in    std_logic;
-	ADC_mosi  		: out std_logic;
+--   --ADC SPI
+--   ADC_sclk	    	: out   std_logic;
+--	ADC_cs_n			: out   std_logic;
+--	ADC_miso		   : in    std_logic;
+--	ADC_mosi  		: out std_logic;
+		  -- Interfaccia Modulo ADC Canale A
+        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+        ACK         : out std_logic;                     -- Clock A
+        ORA         : in  std_logic;                     -- Out of Range A
+        
+        -- Interfaccia Modulo ADC Canale B
+        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+        BCK         : out std_logic;                     -- Clock B
+        ORB         : in  std_logic;                     -- Out of Range B
+   
 	
 	--keys		: in    std_logic_vector(7 downto 0);
 	key_rows 		: in  std_logic_vector(4 downto 0); -- 5 INGRESSI (pull-up)
@@ -771,11 +781,19 @@ scope_inst : entity work.oscilloscope_top
 		  clk_adc => clk_adc,
         rst_n   => core_ireset,
 
-        -- ADC
-        sclk    => ADC_sclk,
-        cs_n    => ADC_cs_n,
-        miso    => ADC_miso,
-		  mosi    => ADC_mosi,
+--        -- ADC
+--        sclk    => ADC_sclk,
+--        cs_n    => ADC_cs_n,
+--        miso    => ADC_miso,
+--		  mosi    => ADC_mosi,
+				  DATA_A        => DATA_A, -- A1..12
+				  ACK      => ACK,                     -- Clock A
+				  ORA      => ORA,                     -- Out of Range A
+				  
+				  -- Interfaccia Modulo ADC Canale B
+				  DATA_B       => DATA_B, -- B1..12
+				  BCK     => BCK,                     -- Clock B
+				  ORB     => ORB,                     -- Out of Range B
 
         -- MMIO
         iore        => core_iore,

@@ -16,11 +16,24 @@ entity oscilloscope_top is
 		  clk_adc   	 : in    std_logic;
         rst_n         : in  std_logic;
 
-        -- SPI ADC
-        sclk          : out std_logic;
-        cs_n          : out std_logic;
-        miso          : in  std_logic;
-        mosi          : out std_logic;
+--        -- SPI ADC
+--        sclk          : out std_logic;
+--        cs_n          : out std_logic;
+--        miso          : in  std_logic;
+--        mosi          : out std_logic;
+		  
+		  -- Interfaccia Modulo ADC Canale A
+        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+        ACK         : out std_logic;                     -- Clock A
+        ORA         : in  std_logic;                     -- Out of Range A
+        
+        -- Interfaccia Modulo ADC Canale B
+        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+        BCK         : out std_logic;                     -- Clock B
+        ORB         : in  std_logic;                     -- Out of Range B
+
+		  
+		  
 
         -- MMIO interface
         iore          : in  std_logic;
@@ -48,53 +61,60 @@ architecture rtl of oscilloscope_top is
     ------------------------------------------------------------------
     -- Tipi e Costanti Time/Div
     ------------------------------------------------------------------
+ --   type time_div_map_t is array (0 to 19) of unsigned(31 downto 0);
+
+
+--constant time_div_map : time_div_map_t := (
+--        to_unsigned(0, 32),          -- 0: 1us (teorico 0.5, arrotondato a 0)
+--        to_unsigned(2, 32),          -- 1: 2us (2 * 1.5 - 1)
+--        to_unsigned(6, 32),          -- 2: 5us (5 * 1.5 - 1 = 6.5 -> 6)
+--        to_unsigned(14, 32),         -- 3: 10us (10 * 1.5 - 1)
+--        to_unsigned(29, 32),         -- 4: 20us (20 * 1.5 - 1)
+--        to_unsigned(74, 32),         -- 5: 50us (50 * 1.5 - 1)
+--        to_unsigned(149, 32),        -- 6: 100us (100 * 1.5 - 1)
+--        to_unsigned(299, 32),        -- 7: 200us
+--        to_unsigned(749, 32),        -- 8: 500us
+--        to_unsigned(1499, 32),       -- 9: 1ms
+--        to_unsigned(2999, 32),       -- 10: 2ms
+--        to_unsigned(7499, 32),       -- 11: 5ms
+--        to_unsigned(14999, 32),      -- 12: 10ms
+--        to_unsigned(29999, 32),      -- 13: 20ms
+--        to_unsigned(74999, 32),      -- 14: 50ms
+--        to_unsigned(149999, 32),     -- 15: 100ms
+--        to_unsigned(299999, 32),     -- 16: 200ms
+--        to_unsigned(749999, 32),     -- 17: 500ms
+--        to_unsigned(1499999, 32),    -- 18: 1s
+--        to_unsigned(2999999, 32)     -- 19: 2s
+--    );
+
+------------------------------------------------------------------
+    -- Tipi e Costanti Time/Div (Ricalcolate per 40 px/div @ 60MHz)
+    ------------------------------------------------------------------
     type time_div_map_t is array (0 to 19) of unsigned(31 downto 0);
 
---    constant time_div_map : time_div_map_t := (
---        to_unsigned(0, 32),        -- 0: 1us
---        to_unsigned(1, 32),        -- 1: 2us
---        to_unsigned(4, 32),        -- 2: 5us
---        to_unsigned(9, 32),        -- 3: 10us
---        to_unsigned(19, 32),       -- 4: 20us
---        to_unsigned(49, 32),       -- 5: 50us
---        to_unsigned(99, 32),       -- 6: 100us
---        to_unsigned(199, 32),      -- 7: 200us
---        to_unsigned(499, 32),      -- 8: 500us
---        to_unsigned(999, 32),      -- 9: 1ms
---        to_unsigned(1999, 32),     -- 10: 2ms
---        to_unsigned(4999, 32),     -- 11: 5ms
---        to_unsigned(9999, 32),     -- 12: 10ms
---        to_unsigned(19999, 32),    -- 13: 20ms
---        to_unsigned(49999, 32),    -- 14: 50ms
---        to_unsigned(99999, 32),    -- 15: 100ms
---        to_unsigned(199999, 32),   -- 16: 200ms
---        to_unsigned(499999, 32),   -- 17: 500ms
---        to_unsigned(999999, 32),   -- 18: 1s
---        to_unsigned(1999999, 32)   -- 19: 2s
---    );
-constant time_div_map : time_div_map_t := (
-        to_unsigned(0, 32),          -- 0: 1us (teorico 0.5, arrotondato a 0)
-        to_unsigned(2, 32),          -- 1: 2us (2 * 1.5 - 1)
-        to_unsigned(6, 32),          -- 2: 5us (5 * 1.5 - 1 = 6.5 -> 6)
-        to_unsigned(14, 32),         -- 3: 10us (10 * 1.5 - 1)
-        to_unsigned(29, 32),         -- 4: 20us (20 * 1.5 - 1)
-        to_unsigned(74, 32),         -- 5: 50us (50 * 1.5 - 1)
-        to_unsigned(149, 32),        -- 6: 100us (100 * 1.5 - 1)
-        to_unsigned(299, 32),        -- 7: 200us
-        to_unsigned(749, 32),        -- 8: 500us
-        to_unsigned(1499, 32),       -- 9: 1ms
-        to_unsigned(2999, 32),       -- 10: 2ms
-        to_unsigned(7499, 32),       -- 11: 5ms
-        to_unsigned(14999, 32),      -- 12: 10ms
-        to_unsigned(29999, 32),      -- 13: 20ms
-        to_unsigned(74999, 32),      -- 14: 50ms
-        to_unsigned(149999, 32),     -- 15: 100ms
-        to_unsigned(299999, 32),     -- 16: 200ms
-        to_unsigned(749999, 32),     -- 17: 500ms
-        to_unsigned(1499999, 32),    -- 18: 1s
-        to_unsigned(2999999, 32)     -- 19: 2s
+    -- Formula: (Tempo_Divisione / (16.66ns * 40)) - 1
+    constant time_div_map : time_div_map_t := (
+        to_unsigned(0, 32),          -- 0: ~666ns/div (Max speed: 1 tick/clock)
+        to_unsigned(2, 32),          -- 1: 2us/div    (60MHz / 3 = 20MHz -> 40px * 50ns)
+        to_unsigned(6, 32),          -- 2: 5us/div    
+        to_unsigned(14, 32),         -- 3: 10us/div
+        to_unsigned(29, 32),         -- 4: 20us/div
+        to_unsigned(74, 32),         -- 5: 50us/div
+        to_unsigned(149, 32),        -- 6: 100us/div
+        to_unsigned(299, 32),        -- 7: 200us/div
+        to_unsigned(749, 32),        -- 8: 500us/div
+        to_unsigned(1499, 32),       -- 9: 1ms/div
+        to_unsigned(2999, 32),       -- 10: 2ms/div
+        to_unsigned(7499, 32),       -- 11: 5ms/div
+        to_unsigned(14999, 32),      -- 12: 10ms/div
+        to_unsigned(29999, 32),      -- 13: 20ms/div
+        to_unsigned(74999, 32),      -- 14: 50ms/div
+        to_unsigned(149999, 32),     -- 15: 100ms/div
+        to_unsigned(299999, 32),     -- 16: 200ms/div
+        to_unsigned(749999, 32),     -- 17: 500ms/div
+        to_unsigned(1499999, 32),    -- 18: 1s/div
+        to_unsigned(2999999, 32)     -- 19: 2s/div
     );
-
 
     ------------------------------------------------------------------
     -- Costanti di sistema
@@ -543,35 +563,75 @@ end process;
     -- Tick generator
     -- Genera tick_en basato sul Time/Div selezionato
     ------------------------------------------------------------------
-    process(clk, rst_n)
+--    process(clk, rst_n)
+--    begin
+--        if rst_n = '0' then
+--            tick             <= '0';
+--            tick_en          <= '0';
+--            base_time_cnt    <= (others=>'0');
+--            base_time_reload <= (others => '0');
+--        elsif rising_edge(clk) then
+--            if state /= next_state then
+--                base_time_cnt <= (others => '0');
+--                tick          <= '0';
+--                tick_en       <= '0';
+--            end if;
+--
+--            if state = IDLE or state = HOLD then
+--                if base_time_reload /= time_div_map(reg_time_div_sel) then
+--                    base_time_reload <= time_div_map(reg_time_div_sel);
+--                    base_time_cnt    <= (others => '0');
+--                end if;
+--            end if;
+--            
+--            if base_time_cnt >= base_time_reload then
+--                base_time_cnt <= (others=>'0');
+--                tick          <= '1';
+--                tick_en       <= '1';
+--            else
+--                base_time_cnt <= base_time_cnt + 1;
+--                tick          <= '0';
+--                tick_en       <= '0';
+--            end if;
+--        end if;
+--    end process;
+
+process(clk, rst_n)
     begin
         if rst_n = '0' then
-            tick             <= '0';
-            tick_en          <= '0';
-            base_time_cnt    <= (others=>'0');
+            tick            <= '0';
+            tick_en         <= '0';
+            base_time_cnt   <= (others => '0');
             base_time_reload <= (others => '0');
         elsif rising_edge(clk) then
+            -- 1. Reset se la FSM cambia stato (mantiene la sincronizzazione)
             if state /= next_state then
                 base_time_cnt <= (others => '0');
-                tick          <= '0';
-                tick_en       <= '0';
+                tick    <= '0';
+                tick_en <= '0';
             end if;
 
+            -- 2. Aggiornamento del valore di reload (solo quando fermo o in attesa)
             if state = IDLE or state = HOLD then
-                if base_time_reload /= time_div_map(reg_time_div_sel) then
-                    base_time_reload <= time_div_map(reg_time_div_sel);
-                    base_time_cnt    <= (others => '0');
-                end if;
+                base_time_reload <= time_div_map(reg_time_div_sel);
             end if;
             
-            if base_time_cnt >= base_time_reload then
-                base_time_cnt <= (others=>'0');
-                tick          <= '1';
-                tick_en       <= '1';
+            -- 3. Logica Generazione Tick (Ottimizzata per 60MHz)
+            if base_time_reload = 0 then
+                -- Massima velocità: ogni colpo di clock è un campione
+                base_time_cnt <= (others => '0');
+                tick    <= '1';
+                tick_en <= '1';
+            elsif base_time_cnt >= base_time_reload then
+                -- Velocità ridotta (decimazione)
+                base_time_cnt <= (others => '0');
+                tick    <= '1';
+                tick_en <= '1';
             else
+                -- Conteggio intermedio
                 base_time_cnt <= base_time_cnt + 1;
-                tick          <= '0';
-                tick_en       <= '0';
+                tick    <= '0';
+                tick_en <= '0';
             end if;
         end if;
     end process;
@@ -951,12 +1011,25 @@ end process;
     ------------------------------------------------------------------
     -- ADC reader instantiation
     ------------------------------------------------------------------
-    adc_reader_inst : entity work.adc128s022_reader
+    adc_reader_inst : entity work.dual_ad9226_reader
         port map(
-            clk   => clk,   rst_n => rst_n,
-            miso  => miso,  mosi  => mosi,
-            sclk  => sclk,  cs_n  => cs_n,
-            ch0   => adc_a, ch1   => adc_b 
+					clk65   => clk,   
+					rst_n => rst_n,
+						-- Interfaccia Modulo ADC Canale A
+				  DATA_A   => DATA_A, -- A1..12
+				  ACK      => ACK,                     -- Clock A
+				  ORA      => ORA,                     -- Out of Range A
+				  
+				  -- Interfaccia Modulo ADC Canale B
+				  DATA_B  => DATA_B, -- B1..12
+				  BCK     => BCK,                     -- Clock B
+				  ORB     => ORB,                     -- Out of Range B
+						
+				
+              ch_a_val   => adc_a, 
+				  ch_b_val   => adc_b 
         );
+		  
+
 
 end architecture;

@@ -58,6 +58,15 @@ ENTITY Tiny_DSO_V2_top IS
 		ADC_sclk :  OUT  STD_LOGIC;
 		ADC_cs_n :  OUT  STD_LOGIC;
 		ADC_mosi :  OUT  STD_LOGIC;
+		-- Interfaccia Modulo ADC Canale A
+	  ADC_A           : in  std_logic_vector(11 downto 0); -- A1..12
+	  ADC_A_CK         : out std_logic;                     -- Clock A
+	  ADC_A_OR         : in  std_logic;                     -- Out of Range A
+	  
+	  -- Interfaccia Modulo ADC Canale B
+	  ADC_B           : in  std_logic_vector(11 downto 0); -- B1..12
+	  ADC_B_CK         : out std_logic;                     -- Clock B
+	  ADC_B_OR         : in  std_logic;                     -- Out of Range B
 
 		KEY_COLS :  OUT  STD_LOGIC_VECTOR(2 DOWNTO 0);
 		SINE_OUT    :  OUT  STD_LOGIC;
@@ -99,11 +108,15 @@ COMPONENT top_avr_core_v8 PORT(
 	TDO    : out   std_logic;
 	TRSTn  : in    std_logic; -- Optional JTAG input
 	
-   --ADC SPI
-   ADC_sclk	    	: out   std_logic;
-	ADC_cs_n			: out   std_logic;
-	ADC_miso		   : in    std_logic;
-	ADC_mosi  		: out std_logic;
+		  -- Interfaccia Modulo ADC Canale A
+        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+        ACK         : out std_logic;                     -- Clock A
+        ORA         : in  std_logic;                     -- Out of Range A
+        
+        -- Interfaccia Modulo ADC Canale B
+        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+        BCK         : out std_logic;                     -- Clock B
+        ORB         : in  std_logic;                     -- Out of Range B
 	
 	--keys		: in    std_logic_vector(7 downto 0);
 	key_rows 		: in  std_logic_vector(4 downto 0); -- 5 INGRESSI (pull-up)
@@ -206,10 +219,19 @@ PORT MAP(nrst => nrst,
 		 tft_rst     => tft_rst,
 		 tft_backlight => tft_backlight,
 		 
-		 ADC_miso => ADC_miso,
-		 ADC_sclk => ADC_sclk,
-		 ADC_cs_n => ADC_cs_n,
-		 ADC_mosi => ADC_mosi,
+--		 ADC_miso => ADC_miso,
+--		 ADC_sclk => ADC_sclk,
+--		 ADC_cs_n => ADC_cs_n,
+--		 ADC_mosi => ADC_mosi,
+
+		  DATA_A        => ADC_A, -- A1..12
+		  ACK      => ADC_A_CK,                     -- Clock A
+		  ORA      => ADC_A_OR,                     -- Out of Range A
+		  
+		  -- Interfaccia Modulo ADC Canale B
+		  DATA_B       => ADC_B, -- B1..12
+		  BCK     => ADC_B_CK,                     -- Clock B
+		  ORB     => ADC_B_OR,                     -- Out of Range B
 		 
 		 -- JTAG related signals
 		 TMS    => '0',
