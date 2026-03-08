@@ -45,6 +45,8 @@
 
 #define REG_TRIG_HYST    0x401E  // Scrittura: Trigger Hysteresis (0-255, in LSB)
 
+#define REG_DDS_ADDR 0x401F  // Frequenza di uscita del DDS (4 byte, 32 bit unsigned int)
+
 #define XRAM_WRITE(addr, val) (*(volatile uint8_t *)(addr) = (val))
 #define XRAM_READ(addr) (*(volatile uint8_t *)(addr))
 
@@ -98,7 +100,7 @@
 #define OFFSET_Y_MIN -50
 #define OFFSET_Y_MAX 250
 #define OFFSET_Y_STEP 2
-#define OFFSET_Y1_C_VAL 120
+#define OFFSET_Y1_C_VAL 145
 #define OFFSET_Y2_C_VAL 145
 
 #define VDIVCH_MIN 0
@@ -107,7 +109,7 @@
 #define VDIVCH_C_VAL 5
 
 #define TDIV_MIN 0
-#define TDIV_MAX 16
+#define TDIV_MAX 20
 #define TDIV_STEP 1
 #define TDIV_C_VAL 11
 

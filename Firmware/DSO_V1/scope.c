@@ -98,19 +98,45 @@ Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
 
 
 const char* time_base_labels[] = {
-    "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
+    "250ns", "500ns", "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
     "100us", "200us", "500us", "1ms",   "2ms",   "5ms", 
     "10ms",  "20ms",  "50ms",  "100ms", "200ms", "500ms", 
     "1s"
+};
+
+// Tabella valori DDS aggiornata (21 ingressi)
+// Indice 0: 250ns/div ... Indice 20: 1s/div
+const uint32_t dds_table[21] PROGMEM = {
+    0xFFFFFFFF, // 0: 250ns/div (Zoom x4 - F_samp equiv 160MHz*)
+    0xFFFFFFFF, // 1: 500ns/div (Zoom x2 - F_samp equiv 80MHz*)
+    0xAAAAAAAA, // 2: 1us/div    (F_samp = 40MHz)
+    0x55555555, // 3: 2us/div    (F_samp = 20MHz)
+    0x22222222, // 4: 5us/div    (F_samp = 8MHz)
+    0x11111111, // 5: 10us/div   (F_samp = 4MHz)
+    0x08888888, // 6: 20us/div   (F_samp = 2MHz)
+    0x0369D036, // 7: 50us/div   (F_samp = 800kHz)
+    0x01B4E81B, // 8: 100us/div  (F_samp = 400kHz)
+    0x00DA740D, // 9: 200us/div  (F_samp = 200kHz)
+    0x00575C28, // 10: 500us/div (F_samp = 80kHz)
+    0x002BEE7D, // 11: 1ms/div   (F_samp = 40kHz)
+    0x0015F73E, // 12: 2ms/div   (F_samp = 20kHz)
+    0x0008C995, // 13: 5ms/div   (F_samp = 8kHz)
+    0x000464CA, // 14: 10ms/div  (F_samp = 4kHz)
+    0x00023265, // 15: 20ms/div  (F_samp = 2kHz)
+    0x0000E5BC, // 16: 50ms/div  (F_samp = 800Hz)
+    0x000072DE, // 17: 100ms/div (F_samp = 400Hz)
+    0x0000396F, // 18: 200ms/div (F_samp = 200Hz)
+    0x000016F3, // 19: 500ms/div (F_samp = 80Hz)
+    0x00000B79  // 20: 1s/div     (F_samp = 40Hz)
 };
 
 
 //Prototipe
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase);
 float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit);
-//int16_t calcolaYTraccia(Channel *ch, uint8_t valoreADC);
+
 int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_16bit);
-int16_t calcolaYTraccia2(Channel *ch, uint16_t valoreADC_16bit);
+
 
 
 // Da chiamare SOLO quando l'utente cambia V/div o Offset
@@ -192,16 +218,68 @@ void calculate_measures(int16_t *buffer, uint16_t size) {
     misure->vrms = (uint16_t)sqrt((double)sum_sq / size);
 }
 
+void aggiorna_registri_dds(uint32_t reg_val) {
+    // Scrittura diretta byte per byte agli indirizzi mappati nell'FPGA
+    XRAM_WRITE(0x4020, (uint8_t)(reg_val & 0xFF));         // LSB
+    XRAM_WRITE(0x4021, (uint8_t)((reg_val >> 8) & 0xFF));
+    XRAM_WRITE(0x4022, (uint8_t)((reg_val >> 16) & 0xFF));
+    XRAM_WRITE(0x4023, (uint8_t)((reg_val >> 24) & 0xFF)); // MSB
+}
+
+void aggiorna_t_div(uint8_t indice) {
+   if (indice > 19) indice = 19;
+
+    uint32_t dds_val = pgm_read_dword(&dds_table[indice]);
+
+    // Scrittura diretta sui 4 indirizzi mappati
+    XRAM_WRITE(0x4020, (uint8_t)(dds_val & 0xFF));         // LSB
+    XRAM_WRITE(0x4021, (uint8_t)((dds_val >> 8) & 0xFF));
+    XRAM_WRITE(0x4022, (uint8_t)((dds_val >> 16) & 0xFF));
+    XRAM_WRITE(0x4023, (uint8_t)((dds_val >> 24) & 0xFF)); // MSB
+}
+
 void set_base_time(uint8_t index) {
+    // Limite di sicurezza aggiornato (0-20)
+    if (index > MAX_TIMEBASE_IDX) index = MAX_TIMEBASE_IDX;
+    
+    current_time_base_idx = index;
+
+    // Recuperiamo il valore DDS a 32 bit dalla tabella in Flash
+    uint32_t dds_val = pgm_read_dword(&dds_table[index]);
+
+    // Inviamo il valore all'FPGA usando la nuova funzione mappata
+    aggiorna_registri_dds(dds_val);
+    aggiorna_t_div(index);
+}
+
+/*void set_base_time(uint8_t index) {
     // Limite di sicurezza a 1s (indice 18)
     if (index > MAX_TIMEBASE_IDX) index = MAX_TIMEBASE_IDX;
     
     current_time_base_idx = index;
 
     // Scrittura nel registro MMIO dell'FPGA
-    REG_BASETIME = index;
+    //REG_BASETIME = index;
+    aggiorna_t_div(index);
 
+}*/
+
+void set_dds_frequency(uint32_t sample_rate) {
+    // Calcolo del valore di incremento per il DDS
+    // Formula: (F_sample / 60MHz) * 2^32
+    // Usiamo i double per evitare l'overflow durante il calcolo
+    double step = ((double)sample_rate / 60000000.0) * 4294967296.0;
+    uint32_t reg_val = (uint32_t)step;
+
+    // Invio dei 4 byte in sequenza
+    // La FPGA li accatasta in dds_temp fino al 4° invio
+    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)(reg_val & 0xFF));         // Byte 0 (LSB)
+    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 8) & 0xFF));  // Byte 1
+    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 16) & 0xFF)); // Byte 2
+    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 24) & 0xFF)); // Byte 3 (MSB -> Trigger update)
 }
+
+
 
 void set_trigger_level(uint16_t level12)
 {
@@ -241,97 +319,104 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
     const int16_t Y_MIN = MARGIN_Y;
     const int16_t Y_MAX = MARGIN_Y + TRACE_H;
 
-    // Variabili per il calcolo misure (locali per massimizzare la velocità nei registri)
-    uint32_t sum_sq = 0;   
-    int32_t  sum_raw = 0;  
-    int16_t  max_v = -32768; // Inizializzati al minimo/massimo possibile per int16
-    int16_t  min_v =  32767;
+    uint32_t sum_sq = 0; int32_t sum_raw = 0;
+    int16_t max_v = -32768; int16_t min_v = 32767;
+    uint16_t samples_counted = 0; 
     
     int16_t y_prev_new_a = -100, y_prev_old_a = -100; 
     int16_t y_prev_new_b = -100, y_prev_old_b = -100; 
 
-   
+    // --- LOGICA IBRIDA 60MHz / 40MHz+ ---
+    uint32_t step_fp;      
+    uint32_t ram_idx_fp;   
+    uint16_t last_ram_idx = 0xFFFF;
+
+    // Gestione differenziata in base alla portata
+    if (current_time_base_idx == 0) {      // 250ns/div (Sorgente 60MHz)
+        step_fp = (150UL << 8) / length;   // 150 campioni spalmati su 400px
+        ram_idx_fp = 125UL << 8;           // Centrato
+    } 
+    else if (current_time_base_idx == 1) { // 500ns/div (Sorgente 60MHz)
+        step_fp = (300UL << 8) / length;   // 300 campioni spalmati su 400px
+        ram_idx_fp = 50UL << 8;            // Centrato
+    } 
+    else {                                 // Da 1us in su (Sorgente 40MHz o inferiore)
+        // Qui il rapporto è 1:1 perché l'FPGA adatta il tick_en alla tabella
+        step_fp = 1UL << 8; 
+        ram_idx_fp = 0;
+    }
 
     for (uint16_t i = 0; i < length; i++) {
         uint16_t x = i + MARGIN_X;
+        uint16_t ram_idx = (uint16_t)(ram_idx_fp >> 8);
 
-        // --- GESTIONE CANALE A ---
+        // Protezione per non eccedere la dimensione del buffer (400 campioni)
+        if (ram_idx >= 400) ram_idx = 399;
+
+        // 1. CANCELLAZIONE (Basata su i)
         if (old_buf_a[i] > Y_MIN && old_buf_a[i] < Y_MAX) {
-            if (vectors && i > 0 && y_prev_old_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX);
+            if (vectors && i > 0 && y_prev_old_a > Y_MIN) 
+                tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX);
             else tft_drawPixel(x, old_buf_a[i], BLACK);
         }
         y_prev_old_a = old_buf_a[i];
 
-        if (ch_a->enabled) {
+        if (old_buf_b[i] > Y_MIN && old_buf_b[i] < Y_MAX) {
+            if (vectors && i > 0 && y_prev_old_b > Y_MIN) 
+                tft_drawLine_Clipped(x-1, y_prev_old_b, x, old_buf_b[i], BLACK, Y_MIN, Y_MAX);
+            else tft_drawPixel(x, old_buf_b[i], BLACK);
+        }
+        y_prev_old_b = old_buf_b[i];
 
-            int16_t y_now_a = calcolaYTraccia2(ch_a, ch1_buffer[i]);
+        // 2. DISEGNO (Basato su ram_idx)
+        if (ch_a->enabled) {
+            int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[ram_idx]);
             if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
-                if (vectors && i > 0 && y_prev_new_a > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
+                if (vectors && i > 0 && y_prev_new_a > Y_MIN) 
+                    tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_a, ch_a->color);
             }
             y_prev_new_a = y_now_a;
             old_buf_a[i] = y_now_a;
         } else { old_buf_a[i] = -100; }
 
-        // --- GESTIONE CANALE B ---
-        if (old_buf_b[i] > Y_MIN && old_buf_b[i] < Y_MAX) {
-            if (vectors && i > 0 && y_prev_old_b > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_old_b, x, old_buf_b[i], BLACK, Y_MIN, Y_MAX);
-            else tft_drawPixel(x, old_buf_b[i], BLACK);
-        }
-        y_prev_old_b = old_buf_b[i];
-
         if (ch_b->enabled) {
-            int16_t y_now_b = calcolaYTraccia2(ch_b, ch2_buffer[i]);
+            int16_t y_now_b = calcolaYTraccia(ch_b, ch2_buffer[ram_idx]);
             if (y_now_b > Y_MIN && y_now_b < Y_MAX) {
-                if (vectors && i > 0 && y_prev_new_b > Y_MIN) tft_drawLine_Clipped(x-1, y_prev_new_b, x, y_now_b, ch_b->color, Y_MIN, Y_MAX);
+                if (vectors && i > 0 && y_prev_new_b > Y_MIN) 
+                    tft_drawLine_Clipped(x-1, y_prev_new_b, x, y_now_b, ch_b->color, Y_MIN, Y_MAX);
                 else tft_drawPixel(x, y_now_b, ch_b->color);
             }
             y_prev_new_b = y_now_b;
             old_buf_b[i] = y_now_b;
         } else { old_buf_b[i] = -100; }
 
-        // --- ACCUMULO DATI PER MISURE (Ottimizzato) ---
-        if(misure->active) {
-            // Seleziona il campione grezzo in base alla sorgente del menu
-            // Nota: sorgente 1 = CH1, sorgente 2 = CH2 (adattalo se i tuoi indici sono 0 e 1)
-            int16_t val = (misure->source == 1) ? ch1_buffer[i] : ch2_buffer[i];
-
+        // 3. MISURE
+        if(misure->active && ram_idx != last_ram_idx) {
+            int16_t val = (misure->source == 1) ? ch1_buffer[ram_idx] : ch2_buffer[ram_idx];
             if (val > max_v) max_v = val;
             if (val < min_v) min_v = val;
             sum_raw += val;
             sum_sq += (uint32_t)((int32_t)val * val);
+            samples_counted++;
+            last_ram_idx = ram_idx;
         }
+
+        ram_idx_fp += step_fp;
     } 
 
-    // --- CALCOLO FINALE E CONVERSIONE IN VOLT ---
-
-    // --- CALCOLO FINALE CON PRECISIONE FLOAT ---
-    if(misure->active) {
-    // 1. Identifica il canale (Sorgente 1 = A, 2 = B)
-    Channel *ch_src = (misure->source == 1) ? ch_a : ch_b;
-
-    // 1. COSTANTE FISSA DI CALIBRAZIONE (Quanto vale 1 bit dell'ADC in Volt)
-    // Esempio: se il tuo ingresso accetta 3.3V max, metti 3.3f
-    // Se hai un partitore fisso che porta 20V a 3.3V, metti 20.0f
-    const float VOLT_FONDO_SCALA = 3.3f; 
-    const float LSB_BASE = VOLT_FONDO_SCALA / 4096.0f;
-
-    // 2. APPLICAZIONE DEL MOLTIPLICATORE (Attenuatore Sonda)
-    // Questo è l'unico parametro del menu che influenza la misura reale!
-    float lsb_reale = LSB_BASE * ch_src->multiplier;
-
-    // 3. Vpp: Forza la sottrazione a float PRIMA della moltiplicazione
-    misure->vpp = (float)(max_v - min_v) * lsb_reale;
-
-    // 4. Vavg: Questa è la riga più critica! 
-    // Se sum_raw e length sono interi, DEVI castarli entrambi.
-    misure->vavg = ((float)sum_raw / (float)length) * lsb_reale;
-    
-    // 5. Vrms: Usa sqrtf (specifica per float) invece di sqrt (per double)
-    float mean_sq = (float)sum_sq / (float)length;
-    misure->vrms = sqrtf(mean_sq) * lsb_reale;
+    // --- CALCOLO FINALE MISURE ---
+    if(misure->active && samples_counted > 0) {
+        Channel *ch_src = (misure->source == 1) ? ch_a : ch_b;
+        // Se siamo a 60MHz, il fattore di calcolo frequenza deve cambiare, 
+        // ma per Vpp/Vavg/Vrms l'LSB dipende solo dai Volt/div
+        const float LSB_REALE = (3.3f / 4096.0f) * ch_src->multiplier;
+        misure->vpp  = (float)(max_v - min_v) * LSB_REALE;
+        misure->vavg = ((float)sum_raw / (float)samples_counted) * LSB_REALE;
+        misure->vrms = sqrtf((float)sum_sq / (float)samples_counted) * LSB_REALE;
+    }
 }
-}
+
 
 void osc_wait_ready(void)
 {
@@ -467,7 +552,7 @@ void drawPanTrack(){
 ** Description:             Converte il valore ADC in coordinata Y pixel basandosi
 ** sui parametri del canale (V/div, offset, invert).
 ***************************************************************************************/
-int16_t calcolaYTraccia2(Channel *ch, uint16_t valoreADC_12bit) {
+int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit) {
     // --- COSTANTI PER ADC A 12 BIT ---
     const float ADC_MAX = 4095.0f;
     const float ADC_ZERO = 2048.0f; // Metà scala per accoppiamento AC/Dual
@@ -493,29 +578,6 @@ int16_t calcolaYTraccia2(Channel *ch, uint16_t valoreADC_12bit) {
     return ch->offset - pixelSpostamento;
 }
 
-int16_t calcolaYTraccia3(Channel *ch, uint16_t adc_raw_12bit) {
-    // Forza il dato a rimanere positivo per un secondo per vedere se la forma è giusta
-    // Shiftiamo di 4 per portarlo a 16 bit se necessario alla tua routine di disegno
-    return (int16_t)((adc_raw_12bit - 2048) * 0.2f); 
-}
-
-int16_t calcolaYTraccia(Channel *ch, uint16_t adc_raw_12bit) {
-
-    if (ch == &ch1) {
-        // Scriviamo l'ADC per scatenare il calcolo nel VHDL
-        XRAM_WRITE(REG_CH1_ADC_L, (uint8_t)(adc_raw_12bit & 0xFF));
-        XRAM_WRITE(REG_CH1_ADC_H, (uint8_t)((adc_raw_12bit >> 8) & 0x0F));
-    } else {
-        XRAM_WRITE(REG_CH2_ADC_L, (uint8_t)(adc_raw_12bit & 0xFF));
-        XRAM_WRITE(REG_CH2_ADC_H, (uint8_t)((adc_raw_12bit >> 8) & 0x0F));
-    }
-
-    // Leggiamo il risultato a 16 bit calcolato dall'FPGA
-    uint8_t low  = XRAM_READ(REG_Y_RESULT_L);
-    uint8_t high = XRAM_READ(REG_Y_RESULT_H);
-    
-    return (int16_t)((high << 8) | low);
-}
 
 
 void draw_ground_marker(Channel *ch) {
@@ -1019,7 +1081,7 @@ float read_fpga_frequency() {
 
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     Channel *trig_ch = (trigger_source == 1) ? &ch1 : &ch2;
-    int16_t y = calcolaYTraccia2(trig_ch, level12); 
+    int16_t y = calcolaYTraccia(trig_ch, level12); 
     
     const uint16_t RIGHT_EDGE = MARGIN_X + TRACE_W - 1;
 
@@ -1472,7 +1534,8 @@ void scope_main(void)
     conf_encoder();
     drawStaticInterface();
     update_status_bar(true);
-    set_base_time(11);
+    set_base_time(19);
+    //set_dds_frequency(0x11111111); 
     set_trigger_level(trigger_level_12bit);   
     set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
     
@@ -1711,14 +1774,15 @@ void scope_main(void)
     new_sel = encoder_values[4];
     if (new_sel != prev_time_div_sel) {
         // Aggiorna il registro solo se il valore è cambiato
-        REG_BASETIME = new_sel;
+        //REG_BASETIME = new_sel;
+        set_base_time(new_sel);
         prev_time_div_sel = new_sel;
         time_div_sel = new_sel; // aggiorna il valore corrente
         time_div_sel_changed = true;
         current_time_base_idx =time_div_sel;
         freeze = false;     // Fondamentale: permette a osc_read_triggered di armare
-                    is_running = true;  // Ci assicuriamo che il loop chiami l'acquisizione
-                    REG_TRIG = 0x01;    // Armiamo la FSM FPGA
+        is_running = true;  // Ci assicuriamo che il loop chiami l'acquisizione
+        REG_TRIG = 0x01;    // Armiamo la FSM FPGA
         updateSidebarLabels(); 
     }
 

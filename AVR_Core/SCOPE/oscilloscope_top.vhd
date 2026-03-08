@@ -58,36 +58,8 @@ end entity;
 
 architecture rtl of oscilloscope_top is
 
-    ------------------------------------------------------------------
-    -- Tipi e Costanti Time/Div
-    ------------------------------------------------------------------
- --   type time_div_map_t is array (0 to 19) of unsigned(31 downto 0);
 
-
---constant time_div_map : time_div_map_t := (
---        to_unsigned(0, 32),          -- 0: 1us (teorico 0.5, arrotondato a 0)
---        to_unsigned(2, 32),          -- 1: 2us (2 * 1.5 - 1)
---        to_unsigned(6, 32),          -- 2: 5us (5 * 1.5 - 1 = 6.5 -> 6)
---        to_unsigned(14, 32),         -- 3: 10us (10 * 1.5 - 1)
---        to_unsigned(29, 32),         -- 4: 20us (20 * 1.5 - 1)
---        to_unsigned(74, 32),         -- 5: 50us (50 * 1.5 - 1)
---        to_unsigned(149, 32),        -- 6: 100us (100 * 1.5 - 1)
---        to_unsigned(299, 32),        -- 7: 200us
---        to_unsigned(749, 32),        -- 8: 500us
---        to_unsigned(1499, 32),       -- 9: 1ms
---        to_unsigned(2999, 32),       -- 10: 2ms
---        to_unsigned(7499, 32),       -- 11: 5ms
---        to_unsigned(14999, 32),      -- 12: 10ms
---        to_unsigned(29999, 32),      -- 13: 20ms
---        to_unsigned(74999, 32),      -- 14: 50ms
---        to_unsigned(149999, 32),     -- 15: 100ms
---        to_unsigned(299999, 32),     -- 16: 200ms
---        to_unsigned(749999, 32),     -- 17: 500ms
---        to_unsigned(1499999, 32),    -- 18: 1s
---        to_unsigned(2999999, 32)     -- 19: 2s
---    );
-
-------------------------------------------------------------------
+	 ------------------------------------------------------------------
     -- Tipi e Costanti Time/Div (Ricalcolate per 40 px/div @ 60MHz)
     ------------------------------------------------------------------
     type time_div_map_t is array (0 to 19) of unsigned(31 downto 0);
@@ -247,6 +219,13 @@ architecture rtl of oscilloscope_top is
     signal adc_temp_l             : std_logic_vector(7 downto 0);
     signal y_result               : signed(15 downto 0) := (others => '0');
     signal adc_full_12bit         : signed(15 downto 0);
+	 
+	 -- Nuovi segnali per DDS a 32 bit
+    signal reg_dds_inc     : unsigned(31 downto 0) := (others => '0');
+    signal dds_temp        : unsigned(23 downto 0) := (others => '0');
+    signal dds_bytecnt     : integer range 0 to 3  := 0;
+    signal dds_acc         : unsigned(31 downto 0) := (others => '0');
+    signal tick_dds        : std_logic := '0';
 
     -- Attributi per visibilità Signal Tap
     attribute keep : boolean;
@@ -330,6 +309,10 @@ begin
                     y_result <= offset_ch2 - resize(v_mult(31 downto 16), 16);
 					 when x"401E" => 
 						  reg_trig_hyst <= resize(unsigned(data_in), 12); -- Carica l'isteresi da C
+					 when x"4020" => reg_dds_inc(7 downto 0)   <= unsigned(data_in);
+					when x"4021" => reg_dds_inc(15 downto 8)  <= unsigned(data_in);
+					when x"4022" => reg_dds_inc(23 downto 16) <= unsigned(data_in);
+					when x"4023" => reg_dds_inc(31 downto 24) <= unsigned(data_in);
                 when others => null;
             end case;
         end if;
@@ -563,78 +546,30 @@ end process;
     -- Tick generator
     -- Genera tick_en basato sul Time/Div selezionato
     ------------------------------------------------------------------
---    process(clk, rst_n)
---    begin
---        if rst_n = '0' then
---            tick             <= '0';
---            tick_en          <= '0';
---            base_time_cnt    <= (others=>'0');
---            base_time_reload <= (others => '0');
---        elsif rising_edge(clk) then
---            if state /= next_state then
---                base_time_cnt <= (others => '0');
---                tick          <= '0';
---                tick_en       <= '0';
---            end if;
---
---            if state = IDLE or state = HOLD then
---                if base_time_reload /= time_div_map(reg_time_div_sel) then
---                    base_time_reload <= time_div_map(reg_time_div_sel);
---                    base_time_cnt    <= (others => '0');
---                end if;
---            end if;
---            
---            if base_time_cnt >= base_time_reload then
---                base_time_cnt <= (others=>'0');
---                tick          <= '1';
---                tick_en       <= '1';
---            else
---                base_time_cnt <= base_time_cnt + 1;
---                tick          <= '0';
---                tick_en       <= '0';
---            end if;
---        end if;
---    end process;
-
 process(clk, rst_n)
-    begin
-        if rst_n = '0' then
-            tick            <= '0';
-            tick_en         <= '0';
-            base_time_cnt   <= (others => '0');
-            base_time_reload <= (others => '0');
-        elsif rising_edge(clk) then
-            -- 1. Reset se la FSM cambia stato (mantiene la sincronizzazione)
-            if state /= next_state then
-                base_time_cnt <= (others => '0');
-                tick    <= '0';
-                tick_en <= '0';
-            end if;
-
-            -- 2. Aggiornamento del valore di reload (solo quando fermo o in attesa)
-            if state = IDLE or state = HOLD then
-                base_time_reload <= time_div_map(reg_time_div_sel);
-            end if;
+begin
+    if rst_n = '0' then
+        dds_acc <= (others => '0');
+        tick_en <= '0';
+    elsif rising_edge(clk) then
+        tick_en <= '0';
+        
+        if reg_dds_inc = 0 then
+            -- Se 0, campioniamo alla massima velocità (60MHz)
+            tick_en <= '1';
+        else
+            -- Accumulatore DDS
+            dds_acc <= dds_acc + reg_dds_inc;
             
-            -- 3. Logica Generazione Tick (Ottimizzata per 60MHz)
-            if base_time_reload = 0 then
-                -- Massima velocità: ogni colpo di clock è un campione
-                base_time_cnt <= (others => '0');
-                tick    <= '1';
+            -- Genera tick sull'overflow dell'accumulatore
+            if dds_acc < reg_dds_inc then 
                 tick_en <= '1';
-            elsif base_time_cnt >= base_time_reload then
-                -- Velocità ridotta (decimazione)
-                base_time_cnt <= (others => '0');
-                tick    <= '1';
-                tick_en <= '1';
-            else
-                -- Conteggio intermedio
-                base_time_cnt <= base_time_cnt + 1;
-                tick    <= '0';
-                tick_en <= '0';
             end if;
         end if;
-    end process;
+    end if;
+end process;
+
+
 
     ------------------------------------------------------------------
     -- Write pointer logic
