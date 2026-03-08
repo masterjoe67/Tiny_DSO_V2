@@ -78,16 +78,30 @@ const float v_div_values[] = {
     1.0,  2.0,  5.0,    10.0 // 1V, 2V, 5V, 10V
 };
 
-const char* v_div_labels[] = {
+/*const char* v_div_labels[] = {
     "10mV", "20mV", "50mV", 
     "100mV", "200mV", "500mV", 
     "1V", "2V", "5V","10V"
-};
+};*/
 
+// Step dinamici per il trigger, mappati sulle  v_div_labels
+// Da 10mV (indice 0) a 10V (indice 9)
+const uint16_t trigger_steps_table[10] = {
+    1,   // 0: 10mV
+    1,   // 1: 20mV
+    3,   // 2: 50mV
+    6,   // 3: 100mV
+    12,  // 4: 200mV
+    32,  // 5: 500mV
+    64,  // 6: 1V
+    128, // 7: 2V
+    320, // 8: 5V
+    640  // 9: 10V
+};
 
 uint8_t old_current_time_base_idx = 0xFF;
 uint16_t old_trigger_level_12bit = 0xFFFF;
-uint32_t old_freq = 0xFFFFFFFF;
+float old_freq = 0xFFFFFFFF;
 
 Point_t old_a = { 0, 0 };
 Point_t old_b = { 0, 0 };
@@ -410,7 +424,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
         Channel *ch_src = (misure->source == 1) ? ch_a : ch_b;
         // Se siamo a 60MHz, il fattore di calcolo frequenza deve cambiare, 
         // ma per Vpp/Vavg/Vrms l'LSB dipende solo dai Volt/div
-        const float LSB_REALE = (3.3f / 4096.0f) * ch_src->multiplier;
+        const float LSB_REALE = (5.0f / 4096.0f) * ch_src->multiplier;
         misure->vpp  = (float)(max_v - min_v) * LSB_REALE;
         misure->vavg = ((float)sum_raw / (float)samples_counted) * LSB_REALE;
         misure->vrms = sqrtf((float)sum_sq / (float)samples_counted) * LSB_REALE;
@@ -565,7 +579,7 @@ int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit) {
     // 2. Calcoliamo il fattore di scala totale
     // Questo trasforma il valore ADC direttamente in "pixel di spostamento"
     // Formula: (Delta / 4095 * 3.3V * Multiplier / VoltsDiv) * 30 pixel
-    float fattoreSpostamento = (deltaADC * 2.0f / ADC_MAX); // * ch->multiplier;
+    float fattoreSpostamento = (deltaADC * 5.0f / ADC_MAX); // * ch->multiplier;
     float divisioni = fattoreSpostamento / ch->volts_div;
     
     if (ch->inverted) divisioni = -divisioni;
@@ -805,15 +819,6 @@ void cycleProbe(Channel *ch)
     drawMenuButton(3, "Probe", data, true, WHITE); 
 }
 
-float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit) {
-    // 1. Convertiamo il valore 0-255 in tensione (assumendo range 3.3V)
-    // Usiamo 255.0f per forzare il calcolo in virgola mobile
-    float tensioneIngresso = ((float)valoreADC_8bit * 3.3f) / 255.0f;
-    
-    // 2. Moltiplichiamo per il fattore della sonda (ch->multiplier)
-    // Se la sonda è 10x, il valore reale è tensioneIngresso * 10
-    return (float)tensioneIngresso * (float)ch->multiplier;
-}
 
 void set_trig_enc_default()
 {
@@ -1026,7 +1031,7 @@ void toggleInvert(Channel *ch)
 
 }
 
-float read_fpga_frequency() {
+float read_fpga_frequency2() {
     uint32_t period = 0;
     uint8_t v0, v1, v2, v3 = 0;
 
@@ -1077,6 +1082,52 @@ float read_fpga_frequency() {
         // In STOP, non ricalcolare: mantieni l'ultimo valore valido a schermo
         // così la cifra non sballa mentre ti muovi nella traccia.
     }
+}
+
+#define FREQ_AVG_SAMPLES 32
+
+float read_fpga_frequency() {
+    static float history[FREQ_AVG_SAMPLES];
+    static uint8_t idx = 0;
+    static float sum = 0;
+    static uint8_t count = 0;
+    static float last_stable_freq = 0;
+
+    // Calcola la frequenza SOLO se siamo in RUN e non stiamo facendo Pan
+    if (is_running && !pan_flag && !freeze) {
+        uint8_t v0 = REG_FREQ0;
+        uint8_t v1 = REG_FREQ1;
+        uint8_t v2 = REG_FREQ2;
+        uint8_t v3 = REG_FREQ3;
+
+        uint32_t period = ((uint32_t)v3 << 24) | 
+                          ((uint32_t)v2 << 16) | 
+                          ((uint32_t)v1 << 8)  | 
+                           (uint32_t)v0;
+
+        if (period == 0) {
+            last_stable_freq = 0;
+            return 0;
+        }
+
+        // Calcolo frequenza istantanea
+        float instant_freq = 3840000000.0f / (float)period;
+
+        // Aggiornamento Media Mobile
+        sum -= history[idx];
+        history[idx] = instant_freq;
+        sum += history[idx];
+        
+        idx = (idx + 1) % FREQ_AVG_SAMPLES;
+        if (count < FREQ_AVG_SAMPLES) count++;
+
+        last_stable_freq = sum / count;
+        return last_stable_freq;
+    } 
+    
+    // In STOP (freeze) o durante il Pan, restituiamo l'ultimo valore calcolato
+    // senza leggere i registri, così la cifra sul display resta ferma.
+    return last_stable_freq;
 }
 
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
@@ -1298,7 +1349,7 @@ else {
     }
 
     // --- TRIGGER LEVEL ---
-    if(old_trigger_level_12bit != trigger_level_12bit || force){
+    /*(old_trigger_level_12bit != trigger_level_12bit || force){
         tft_fillRect(xStart + 330, yPos, 100, 16, BLACK);
         setTextColor(GREEN, BLACK);
         tft_set_cursor(xStart + 330, yPos);
@@ -1309,7 +1360,30 @@ else {
         tft_print_float(level_mv / 1000.0, 2);
         tft_Print("V");
         old_trigger_level_12bit = trigger_level_12bit;
-    }
+    }*/
+   if(old_trigger_level_12bit != trigger_level_12bit || force){
+    tft_fillRect(xStart + 330, yPos, 100, 16, BLACK);
+    setTextColor(GREEN, BLACK);
+    tft_set_cursor(xStart + 330, yPos);
+    tft_Print("Trig: ");
+
+    // 1. Calcolo del livello relativo allo zero dell'ADC (es. 2048)
+    // Sostituisci 'ch1.zero_adc' con la variabile che usi per lo zero del canale sorgente
+    int32_t relative_level = (int32_t)trigger_level_12bit - 2048; 
+
+    // 2. Calcolo in millivolt usando il riferimento reale a 5V (5000mV)
+    // Usiamo uint32_t per evitare overflow durante la moltiplicazione
+    int32_t level_mv = (relative_level * 5000L) / 4096;
+
+    // 3. Stampa con segno (per vedere +0.50V o -0.20V)
+    if(level_mv >= 0) tft_Print("+");
+    // Se level_mv è negativo, tft_print_float di solito gestisce già il segno meno
+    
+    tft_print_float(level_mv / 1000.0, 2);
+    tft_Print("V");
+
+    old_trigger_level_12bit = trigger_level_12bit;
+}
     // Supponiamo di aver calcolato 'freq'
     if(misure->f_active == 1) {
     float freq = read_fpga_frequency();
@@ -1318,7 +1392,7 @@ else {
     if(old_freq != freq || old_f_active == 0) {
         tft_set_cursor(MARGIN_X + 230, yPos + 20); 
         setTextColor(WHITE, BLACK);
-        
+        tft_fillRect(MARGIN_X + 230, yPos + 20, 100, 16, BLACK);
         // Pulizia locale prima di scrivere il nuovo valore (opzionale se tft_Print sovrascrive bene)
         // tft_fillRect(MARGIN_X + 230, yPos + 20, 80, 10, BLACK); 
 
@@ -1511,10 +1585,15 @@ void updateChannelVoltDiv(Channel *ch, int16_t current_enc, int16_t *last_enc) {
         }
 
         *last_enc = current_enc;
+
+
+        if(trigger_source == 1 && ch == &ch1) {
+            configure_encoder(5, PARAM_STEP, calcola_step_trigger(ch->volts_div)); // Aggiorna dinamicamente lo step del trigger
+        }
+        if(trigger_source == 2 && ch == &ch2) {
+            configure_encoder(5, PARAM_STEP, calcola_step_trigger(ch->volts_div)); // Aggiorna dinamicamente lo step del trigger
+        }
     }
-    /*uart_print("volts_div ");
-        uart_print_float(ch->volts_div, 2);
-        uart_print("\r\n");*/
 }
 
 void scope_set_hysteresis(uint8_t value) {
@@ -1523,12 +1602,33 @@ void scope_set_hysteresis(uint8_t value) {
     XRAM_WRITE(REG_TRIG_HYST, value);
 }
 
+// Routine per calcolare lo step dinamico del trigger
+// ch->volts_div: valore assoluto (0-4096) che rappresenta il range -5V/+5V
+uint16_t calcola_step_trigger(float current_vdiv) {
+    
+    // Gestione scale millivolt (0.01V - 0.05V)
+    if (current_vdiv <= 0.021f) return 1;   // 10mV e 20mV: precisione massima
+    if (current_vdiv <= 0.051f) return 4;   // 50mV: 1 scatto ~ 2.5 pixel
+    
+    // Gestione scale medie (100mV - 500mV)
+    if (current_vdiv <= 0.11f)  return 8;   // 100mV
+    if (current_vdiv <= 0.21f)  return 16;  // 200mV
+    if (current_vdiv <= 0.51f)  return 40;  // 500mV
+    
+    // Gestione scale alte (1V - 10V)
+    if (current_vdiv <= 1.1f)   return 80;  // 1V
+    if (current_vdiv <= 2.1f)   return 160; // 2V
+    if (current_vdiv <= 5.1f)   return 400; // 5V
+    
+    return 800; // Default per 10V
+}
+
 // --- main loop ---
 void scope_main(void)
 {
     uint8_t key, rep;
     uint8_t new_sel;
-    uint16_t new_trigger_level;
+    //uint16_t new_trigger_level;
     
     init_channels();
     conf_encoder();
@@ -1548,6 +1648,7 @@ void scope_main(void)
     aggiorna_parametri_hw(&ch2);
 
     scope_set_hysteresis(20); // Imposta un valore di default per l'isteresi
+    //configure_encoder(5, PARAM_STEP, calcola_step_trigger(current_enc));
 
    while(1)
     {
@@ -1563,15 +1664,7 @@ void scope_main(void)
         
         
         if(ev != 0xFF){
-            uart_print("Event: ");
-            uart_print_hex(ev);
-            uart_print("\r\n");
-           /* tft_fillRect(100, 100, 100, 16, BLACK);
-        setTextColor(YELLOW, BLACK);
-        tft_set_cursor(100, 100);
-        tft_Print("CH2: ");
-            tft_print_float(ev, 2);*/
-
+ 
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
@@ -1786,17 +1879,7 @@ void scope_main(void)
         updateSidebarLabels(); 
     }
 
-    /*new_trigger_level = encoder_values[5];
-    if (new_trigger_level != prev_trigger_level) {
-        // Aggiorna
-        trigger_level_12bit = new_trigger_level;
-        set_trigger_level(trigger_level_12bit);
-        prev_trigger_level = new_trigger_level;
-        
-        // Aggiorna la scritta della tensione in alto
-        updateSidebarLabels(); 
-    }*/
-
+   
     int16_t new_val = encoder_values[5];
 
 if (new_val != prev_enc_trig_val) {
@@ -1816,7 +1899,6 @@ if (new_val != prev_enc_trig_val) {
     }
 
     prev_enc_trig_val = new_val;
-    //updateSidebarLabels(); // Aggiorna i testi a video (Livello o Hyst)
 }
 
     int16_t new_pan = encoder_values[6];

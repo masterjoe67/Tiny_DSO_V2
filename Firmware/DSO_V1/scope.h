@@ -227,11 +227,7 @@ void toggleTrigLevelMode(void);
 void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,
                       trig_channel_t chan, uint8_t edge_rising);
 
-// Funzione per acquisizione dati (gestisce pre/post trigger)
-//void osc_acquire_samples(void);
-
-// Funzione di visualizzazione
-//void osc_draw_samples(void);
+uint16_t calcola_step_trigger(float volts_div_val);
 
 void scope_main(void);
 
