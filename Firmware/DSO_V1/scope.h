@@ -130,6 +130,30 @@
 #define COLOR_GRID WHITE
 
 
+#define V_DIV_10MV 0
+#define V_DIV_20MV 1
+#define V_DIV_50MV 2
+#define V_DIV_100MV 3
+#define V_DIV_200MV 4
+#define V_DIV_500MV 5
+#define V_DIV_1V 6
+#define V_DIV_5V 8
+#define V_DIV_10V 9
+
+#define T_DIV_250NS 0
+#define T_DIV_500NS 1
+#define T_DIV_1US 2
+#define T_DIV_2US 3
+#define T_DIV_5US 4
+#define T_DIV_10US 5
+#define T_DIV_20US 6
+#define T_DIV_50US 7
+#define T_DIV_100US 8
+#define T_DIV_200US 9
+#define T_DIV_500US 10
+#define T_BASE_1MS 11
+#define T_BASE_10MS 12
+
 extern uint16_t _width;
 extern uint16_t _height;
 extern uint8_t  _rotation;
@@ -167,6 +191,7 @@ typedef struct {
     float vpp;    // Volt Picco-Picco (in LSB o mV)
     float vavg;   // Valore Medio
     float vrms;   // True RMS
+    float vdc;    // Componente DC
     float freq;   // Frequenza in Hz
     uint8_t active;
     uint8_t f_active;

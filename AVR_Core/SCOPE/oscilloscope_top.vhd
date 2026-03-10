@@ -376,29 +376,60 @@ begin
         accumulator <= (others => '0');
         freq_period_reg <= (others => '0');
     elsif rising_edge(clk) then
-        -- Incremento costante dell'accumulatore
-        if accumulator /= x"FFFFFFFF" then
-            accumulator <= accumulator + 1;
-        end if;
+        -- 1. L'accumulatore deve sempre contare (non fermarlo mai!)
+        accumulator <= accumulator + 1;
 
-        -- Logica di cattura al colpo di trigger
+        -- 2. Logica di cattura
         if trig_hit_raw = '1' then
             if gate_count >= 63 then 
-                freq_period_reg <= accumulator; -- LATCH del periodo totale
-                accumulator <= (others => '0'); -- Reset sincronizzato
+                freq_period_reg <= accumulator; -- Salva il tempo totale di 64 cicli
+                accumulator <= (others => '0'); -- Reset sincronizzato dell'accumulatore
                 gate_count <= (others => '0');
             else
                 gate_count <= gate_count + 1;
             end if;
         end if;
 
-        -- Watchdog / Timeout (se il segnale sparisce)
-        if accumulator = x"FFFFFFFF" then
+        -- 3. Watchdog Migliorato (Timeout)
+        -- Se l'accumulatore supera un tempo ragionevole (es. 0.5 secondi o fondo scala)
+        -- significa che la frequenza è troppo bassa o il segnale è sparito.
+        if accumulator = x"03938700" then -- Esempio: 60MHz * 1 secondo (o usa FFFFFFFF)
             gate_count <= (others => '0');
             freq_period_reg <= (others => '0');
+            accumulator <= (others => '0'); -- IMPORTANTE: Resetta l'accumulatore per farlo ripartire
         end if;
     end if;
 end process;
+--process(clk, rst_n)
+--begin
+--    if rst_n = '0' then
+--        gate_count <= (others => '0');
+--        accumulator <= (others => '0');
+--        freq_period_reg <= (others => '0');
+--    elsif rising_edge(clk) then
+--        -- Incremento costante dell'accumulatore
+--        if accumulator /= x"FFFFFFFF" then
+--            accumulator <= accumulator + 1;
+--        end if;
+--
+--        -- Logica di cattura al colpo di trigger
+--        if trig_hit_raw = '1' then
+--            if gate_count >= 63 then 
+--                freq_period_reg <= accumulator; -- LATCH del periodo totale
+--                accumulator <= (others => '0'); -- Reset sincronizzato
+--                gate_count <= (others => '0');
+--            else
+--                gate_count <= gate_count + 1;
+--            end if;
+--        end if;
+--
+--        -- Watchdog / Timeout (se il segnale sparisce)
+--        if accumulator = x"FFFFFFFF" then
+--            gate_count <= (others => '0');
+--            freq_period_reg <= (others => '0');
+--        end if;
+--    end if;
+--end process;
 
 -- 2. PROCESSO GENERAZIONE TRIGGER HIT (Pulizia Glitch)
 process(clk, rst_n)

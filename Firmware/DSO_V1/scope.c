@@ -144,12 +144,36 @@ const uint32_t dds_table[21] PROGMEM = {
     0x00000B79  // 20: 1s/div     (F_samp = 40Hz)
 };
 
+const float timebase_seconds[] = {
+    0.00000025f, // 0: 250ns
+    0.00000050f, // 1: 500ns
+    0.00000100f, // 2: 1us
+    0.00000200f, // 3: 2us
+    0.00000500f, // 4: 5us
+    0.00001000f, // 5: 10us
+    0.00002000f, // 6: 20us
+    0.00005000f, // 7: 50us
+    0.00010000f, // 8: 100us
+    0.00020000f, // 9: 200us
+    0.00050000f, // 10: 500us
+    0.00100000f, // 11: 1ms
+    0.00200000f, // 12: 2ms
+    0.00500000f, // 13: 5ms
+    0.01000000f, // 14: 10ms
+    0.02000000f, // 15: 20ms
+    0.05000000f, // 16: 50ms
+    0.10000000f, // 17: 100ms
+    0.20000000f, // 18: 200ms
+    0.50000000f, // 19: 500ms
+    1.00000000f  // 20: 1s
+};
+
 
 //Prototipe
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase);
 float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit);
 
-int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_16bit);
+int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_16bit, bool isTrigger); 
 
 
 
@@ -266,17 +290,7 @@ void set_base_time(uint8_t index) {
     aggiorna_t_div(index);
 }
 
-/*void set_base_time(uint8_t index) {
-    // Limite di sicurezza a 1s (indice 18)
-    if (index > MAX_TIMEBASE_IDX) index = MAX_TIMEBASE_IDX;
-    
-    current_time_base_idx = index;
 
-    // Scrittura nel registro MMIO dell'FPGA
-    //REG_BASETIME = index;
-    aggiorna_t_div(index);
-
-}*/
 
 void set_dds_frequency(uint32_t sample_rate) {
     // Calcolo del valore di incremento per il DDS
@@ -333,104 +347,125 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
     const int16_t Y_MIN = MARGIN_Y;
     const int16_t Y_MAX = MARGIN_Y + TRACE_H;
 
-    uint32_t sum_sq = 0; int32_t sum_raw = 0;
-    int16_t max_v = -32768; int16_t min_v = 32767;
-    uint16_t samples_counted = 0; 
-    
-    int16_t y_prev_new_a = -100, y_prev_old_a = -100; 
-    int16_t y_prev_new_b = -100, y_prev_old_b = -100; 
+    // --- 1. RESET VARIABILI MISURE (Locali, non static!) ---
+    uint64_t sum_sq = 0; 
+    int64_t sum_raw_acc = 0;
+    int32_t max_adc = -1;    // Inizializzazione per forzare il primo aggiornamento
+    int32_t min_adc = 4096; 
+    uint16_t samples_misure = 0;
 
-    // --- LOGICA IBRIDA 60MHz / 40MHz+ ---
-    uint32_t step_fp;      
-    uint32_t ram_idx_fp;   
-    uint16_t last_ram_idx = 0xFFFF;
+    // --- 2. CALCOLO MISURE (Ciclo lineare su tutto il buffer) ---
+    if(misure->active) {
+        for(uint16_t m = 0; m < 400; m++) {
+            // Prendiamo il dato e forziamo la pulizia a 12 bit
+            uint16_t val = (misure->source == 1) ? (uint16_t)ch1_buffer[m] : (uint16_t)ch2_buffer[m];
+            val &= 0x0FFF; 
 
-    // Gestione differenziata in base alla portata
-    if (current_time_base_idx == 0) {      // 250ns/div (Sorgente 60MHz)
-        step_fp = (150UL << 8) / length;   // 150 campioni spalmati su 400px
-        ram_idx_fp = 125UL << 8;           // Centrato
-    } 
-    else if (current_time_base_idx == 1) { // 500ns/div (Sorgente 60MHz)
-        step_fp = (300UL << 8) / length;   // 300 campioni spalmati su 400px
-        ram_idx_fp = 50UL << 8;            // Centrato
-    } 
-    else {                                 // Da 1us in su (Sorgente 40MHz o inferiore)
-        // Qui il rapporto è 1:1 perché l'FPGA adatta il tick_en alla tabella
-        step_fp = 1UL << 8; 
-        ram_idx_fp = 0;
+            // Aggiornamento picchi: solo se il valore è nel range reale dell'ADC
+            if ((int32_t)val > max_adc) max_adc = (int32_t)val;
+            if ((int32_t)val < min_adc) min_adc = (int32_t)val;
+
+            // Accumulo per Vavg (media)
+            sum_raw_acc += val;
+
+            // Accumulo per Vrms centrato su 2048
+            int32_t centrato = (int32_t)val - 2048;
+            sum_sq += (uint64_t)((int64_t)centrato * centrato);
+            
+            samples_misure++;
+        }
     }
 
+    // --- 3. LOGICA TIMING DISEGNO (Invariata) ---
+    uint32_t step_fp; uint32_t ram_idx_fp;   
+    if (current_time_base_idx == 0) { step_fp = (150UL << 8) / length; ram_idx_fp = 125UL << 8; } 
+    else if (current_time_base_idx == 1) { step_fp = (300UL << 8) / length; ram_idx_fp = 50UL << 8; } 
+    else { step_fp = 1UL << 8; ram_idx_fp = 0; }
+
+    int16_t y_prev_new_a = -100, y_prev_old_a = -100;
+    int16_t y_prev_new_b = -100, y_prev_old_b = -100;
+
+
+   // --- 4. LOOP DI DISEGNO (Cancellazione SEMPRE, Tracciamento solo se ENABLED) ---
     for (uint16_t i = 0; i < length; i++) {
         uint16_t x = i + MARGIN_X;
         uint16_t ram_idx = (uint16_t)(ram_idx_fp >> 8);
-
-        // Protezione per non eccedere la dimensione del buffer (400 campioni)
         if (ram_idx >= 400) ram_idx = 399;
 
-        // 1. CANCELLAZIONE (Basata su i)
+        // --- GESTIONE CANALE A ---
+        // 1. CANCELLAZIONE (Sempre, se il vecchio punto era valido)
         if (old_buf_a[i] > Y_MIN && old_buf_a[i] < Y_MAX) {
             if (vectors && i > 0 && y_prev_old_a > Y_MIN) 
-                tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX);
-            else tft_drawPixel(x, old_buf_a[i], BLACK);
+                tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX-1);
+            else 
+                tft_drawPixel(x, old_buf_a[i], BLACK);
         }
         y_prev_old_a = old_buf_a[i];
 
+        // 2. DISEGNO NUOVO PUNTO (Solo se abilitato)
+        if (ch_a->enabled) {
+            int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[ram_idx], false);
+            if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
+                if (vectors && i > 0 && y_prev_new_a > Y_MIN) 
+                    tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX-1);
+                else 
+                    tft_drawPixel(x, y_now_a, ch_a->color);
+            }
+            y_prev_new_a = y_now_a;
+            old_buf_a[i] = y_now_a; // Salva per cancellarlo al prossimo giro
+        } else {
+            old_buf_a[i] = -100;    // Segna come vuoto per i prossimi cicli
+            y_prev_new_a = -100;
+        }
+
+        // --- GESTIONE CANALE B ---
+        // 1. CANCELLAZIONE
         if (old_buf_b[i] > Y_MIN && old_buf_b[i] < Y_MAX) {
             if (vectors && i > 0 && y_prev_old_b > Y_MIN) 
                 tft_drawLine_Clipped(x-1, y_prev_old_b, x, old_buf_b[i], BLACK, Y_MIN, Y_MAX);
-            else tft_drawPixel(x, old_buf_b[i], BLACK);
+            else 
+                tft_drawPixel(x, old_buf_b[i], BLACK);
         }
         y_prev_old_b = old_buf_b[i];
 
-        // 2. DISEGNO (Basato su ram_idx)
-        if (ch_a->enabled) {
-            int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[ram_idx]);
-            if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
-                if (vectors && i > 0 && y_prev_new_a > Y_MIN) 
-                    tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
-                else tft_drawPixel(x, y_now_a, ch_a->color);
-            }
-            y_prev_new_a = y_now_a;
-            old_buf_a[i] = y_now_a;
-        } else { old_buf_a[i] = -100; }
-
+        // 2. DISEGNO NUOVO PUNTO
         if (ch_b->enabled) {
-            int16_t y_now_b = calcolaYTraccia(ch_b, ch2_buffer[ram_idx]);
+            int16_t y_now_b = calcolaYTraccia(ch_b, ch2_buffer[ram_idx], false);
             if (y_now_b > Y_MIN && y_now_b < Y_MAX) {
                 if (vectors && i > 0 && y_prev_new_b > Y_MIN) 
                     tft_drawLine_Clipped(x-1, y_prev_new_b, x, y_now_b, ch_b->color, Y_MIN, Y_MAX);
-                else tft_drawPixel(x, y_now_b, ch_b->color);
+                else 
+                    tft_drawPixel(x, y_now_b, ch_b->color);
             }
             y_prev_new_b = y_now_b;
             old_buf_b[i] = y_now_b;
-        } else { old_buf_b[i] = -100; }
-
-        // 3. MISURE
-        if(misure->active && ram_idx != last_ram_idx) {
-            int16_t val = (misure->source == 1) ? ch1_buffer[ram_idx] : ch2_buffer[ram_idx];
-            if (val > max_v) max_v = val;
-            if (val < min_v) min_v = val;
-            sum_raw += val;
-            sum_sq += (uint32_t)((int32_t)val * val);
-            samples_counted++;
-            last_ram_idx = ram_idx;
+        } else {
+            old_buf_b[i] = -100;
+            y_prev_new_b = -100;
         }
 
         ram_idx_fp += step_fp;
-    } 
+    }
 
-    // --- CALCOLO FINALE MISURE ---
-    if(misure->active && samples_counted > 0) {
+    // --- 5. CALCOLO FINALE MISURE (Senza ambiguità) ---
+    if(misure->active && samples_misure > 0) {
         Channel *ch_src = (misure->source == 1) ? ch_a : ch_b;
-        // Se siamo a 60MHz, il fattore di calcolo frequenza deve cambiare, 
-        // ma per Vpp/Vavg/Vrms l'LSB dipende solo dai Volt/div
-        const float LSB_REALE = (5.0f / 4096.0f) * ch_src->multiplier;
-        misure->vpp  = (float)(max_v - min_v) * LSB_REALE;
-        misure->vavg = ((float)sum_raw / (float)samples_counted) * LSB_REALE;
-        misure->vrms = sqrtf((float)sum_sq / (float)samples_counted) * LSB_REALE;
+        const float LSB = (10.0f / 4096.0f) * ch_src->multiplier;
+
+        // Calcolo Vpp: usiamo int32_t per la differenza e poi forziamo il valore assoluto
+        int32_t delta = max_adc - min_adc;
+        if (delta < 0) delta = 0; // Protezione contro inizializzazioni fallite
+        misure->vpp = (float)delta * LSB;
+
+        // Vavg
+        float avg_raw = ((float)sum_raw_acc / (float)samples_misure) - 2048.0f;
+        misure->vavg = avg_raw * LSB;
+
+        // Vrms
+        float rms_pts = sqrtf((float)sum_sq / (float)samples_misure);
+        misure->vrms = rms_pts * LSB;
     }
 }
-
 
 void osc_wait_ready(void)
 {
@@ -566,32 +601,31 @@ void drawPanTrack(){
 ** Description:             Converte il valore ADC in coordinata Y pixel basandosi
 ** sui parametri del canale (V/div, offset, invert).
 ***************************************************************************************/
-int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit) {
-    // --- COSTANTI PER ADC A 12 BIT ---
-    const float ADC_MAX = 4095.0f;
-    const float ADC_ZERO = 2048.0f; // Metà scala per accoppiamento AC/Dual
-    const float PIXEL_PER_DIV = 30.0f;
+int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit, bool isTrigger) {
+    static const float RANGE_TOTALE = 10.0f; 
+    static const float ADC_RESOLUTION = 4096.0f;
+    static const float BITS_PER_VOLT = ADC_RESOLUTION / RANGE_TOTALE; // 409.6
+    static const float ADC_ZERO = 2048.0f;
+    static const float PIXEL_PER_DIV = 30.0f;
 
-    // 1. Calcoliamo lo spostamento grezzo rispetto allo zero dell'ADC
-    // (Il valore può essere positivo o negativo)
+    // 1. Delta rispetto al centro
     float deltaADC = (float)valoreADC_12bit - ADC_ZERO;
 
-    // 2. Calcoliamo il fattore di scala totale
-    // Questo trasforma il valore ADC direttamente in "pixel di spostamento"
-    // Formula: (Delta / 4095 * 3.3V * Multiplier / VoltsDiv) * 30 pixel
-    float fattoreSpostamento = (deltaADC * 5.0f / ADC_MAX); // * ch->multiplier;
-    float divisioni = fattoreSpostamento / ch->volts_div;
-    
-    if (ch->inverted) divisioni = -divisioni;
+    // 2. Volt reali
+    float volt = deltaADC / BITS_PER_VOLT;
 
-    // 3. Calcolo pixel finali
-    int16_t pixelSpostamento = (int16_t)(divisioni * PIXEL_PER_DIV);
+    // 3. Quanti pixel si deve spostare (es. 1V = 2 divisioni = 60 pixel)
+    float pixelSpostamento = (volt / ch->volts_div) * PIXEL_PER_DIV;
 
-    // 4. POSIZIONE SULLO SCHERMO
-    // ch->offset è la posizione della linea dello zero scelta dall'utente sul TFT
-    return ch->offset - pixelSpostamento;
+    // --- CORREZIONE INVERSIONE ---
+    // Se il segnale è positivo (volt > 0), vogliamo che la Y diminuisca 
+    // per andare verso l'alto dello schermo.
+    if (ch->inverted) {
+        return (int16_t)(ch->offset - pixelSpostamento); 
+    } else {
+        return (int16_t)(ch->offset + pixelSpostamento);
+    }
 }
-
 
 
 void draw_ground_marker(Channel *ch) {
@@ -941,24 +975,6 @@ void updateSidebarLabels() {
         
     }
 
-    /*else if (currentMenu == MENU_TBASE) {
-        
-        drawMenuButton(0, "       ", true, WHITE);
-        drawMenuButton(1, "       ", true, WHITE);
-        drawMenuButton(2, "       ", true, WHITE);
-        drawMenuButton(3, "       ", true, WHITE);
-        drawMenuButton(4, "       ", true, WHITE);
-  
-    }
-    else if (currentMenu == MENU_PAN) {
-        
-        drawMenuButton(0, "       ", true, WHITE);
-        drawMenuButton(1, "       ", true, WHITE);
-        drawMenuButton(2, "       ", true, WHITE);
-        drawMenuButton(3, "       ", true, WHITE);
-        drawMenuButton(4, "       ", true, WHITE);
-  
-    }*/
 }
 
 void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
@@ -1031,62 +1047,11 @@ void toggleInvert(Channel *ch)
 
 }
 
-float read_fpga_frequency2() {
-    uint32_t period = 0;
-    uint8_t v0, v1, v2, v3 = 0;
 
-    // Leggiamo i 4 byte in sequenza dal registro REG_FREQ
-    // L'FPGA incrementerà internamente l'indice del byte
-
-    v0 = REG_FREQ0;
-    v1 = REG_FREQ1;
-    v2 = REG_FREQ2;
-    v3 = REG_FREQ3;
-
-    period = ((uint32_t)v3 << 24) | 
-                         ((uint32_t)v2 << 16) | 
-                         ((uint32_t)v1 << 8)  | 
-                          (uint32_t)v0;
-
-    
-   
-    //float freq = 2560000000.0f / (float)period; //40MHz
-    float freq = 3840000000.0f / (float)period;
-    /*uart_print("Freq ");
-    uart_print_float(new_period, 1);
-    uart_print("\r\n");*/
-    if (period == 0) return 0;
-    return freq;
-    
-
-
-    // Calcola la frequenza SOLO se siamo in RUN
-    // o se abbiamo appena catturato un SINGLE.
-    // NON calcolarla mentre muovi il Pan in STOP!
-    if (is_running && !pan_flag) {
-        v0 = REG_FREQ0;
-        v1 = REG_FREQ1;
-        v2 = REG_FREQ2;
-        v3 = REG_FREQ3;
-
-        period = ((uint32_t)v3 << 24) | 
-                ((uint32_t)v2 << 16) | 
-                ((uint32_t)v1 << 8)  | 
-                (uint32_t)v0;
-
-        /*if (period > 0) {
-            float freq = 3840000000.0f / (float)period;
-            // Aggiorna il valore a video
-        }*/
-    } else if (freeze) {
-        // In STOP, non ricalcolare: mantieni l'ultimo valore valido a schermo
-        // così la cifra non sballa mentre ti muovi nella traccia.
-    }
-}
 
 #define FREQ_AVG_SAMPLES 32
 
-float read_fpga_frequency() {
+float read_fpga_frequency2() {
     static float history[FREQ_AVG_SAMPLES];
     static uint8_t idx = 0;
     static float sum = 0;
@@ -1130,9 +1095,56 @@ float read_fpga_frequency() {
     return last_stable_freq;
 }
 
+float read_fpga_frequency() {
+    static float history[FREQ_AVG_SAMPLES] = {0};
+    static uint8_t idx = 0;
+    static float sum = 0;
+    static uint8_t count = 0;
+    static float last_stable_freq = 0;
+
+    if (is_running && !pan_flag && !freeze) {
+        // Lettura registri (Assicurati che l'FPGA faccia il LATCH di tutti e 4 insieme)
+        uint32_t period = ((uint32_t)REG_FREQ3 << 24) | 
+                          ((uint32_t)REG_FREQ2 << 16) | 
+                          ((uint32_t)REG_FREQ1 << 8)  | 
+                           (uint32_t)REG_FREQ0;
+
+        // Se il periodo è 0 o il watchdog dell'FPGA è intervenuto (FFFFFFFF)
+        if (period == 0 || period == 0xFFFFFFFF) {
+            // Svuota velocemente la media se non c'è segnale
+            sum = 0; count = 0; idx = 0;
+            for(int i=0; i<FREQ_AVG_SAMPLES; i++) history[i] = 0;
+            last_stable_freq = 0;
+            return 0;
+        }
+
+        // Calcolo frequenza istantanea
+        // 3.840.000.000 = 60MHz * 64 (gate count)
+        float instant_freq = 3840000000.0f / (float)period;
+
+        // Filtro di plausibilità (evita spike assurdi)
+        // Se la frequenza salta del 1000% in un colpo solo, ignoralo o gestiscilo
+        if (count > 0 && instant_freq > last_stable_freq * 10.0f && last_stable_freq > 1.0f) {
+             return last_stable_freq; 
+        }
+
+        // Aggiornamento Media Mobile
+        sum -= history[idx];
+        history[idx] = instant_freq;
+        sum += history[idx];
+        
+        idx = (idx + 1) % FREQ_AVG_SAMPLES;
+        if (count < FREQ_AVG_SAMPLES) count++;
+
+        last_stable_freq = sum / count;
+    } 
+    
+    return last_stable_freq;
+}
+
 void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
     Channel *trig_ch = (trigger_source == 1) ? &ch1 : &ch2;
-    int16_t y = calcolaYTraccia(trig_ch, level12); 
+    int16_t y = calcolaYTraccia(trig_ch, level12, true); 
     
     const uint16_t RIGHT_EDGE = MARGIN_X + TRACE_W - 1;
 
@@ -1348,19 +1360,7 @@ else {
     tft_Print("/div");
     }
 
-    // --- TRIGGER LEVEL ---
-    /*(old_trigger_level_12bit != trigger_level_12bit || force){
-        tft_fillRect(xStart + 330, yPos, 100, 16, BLACK);
-        setTextColor(GREEN, BLACK);
-        tft_set_cursor(xStart + 330, yPos);
-        tft_Print("Trig: ");
-        // Calcoliamo il valore in Volt o mostriamo i bit
-        // Se reg_trig_level è 0-4095 (12 bit)
-        uint16_t level_mv = (uint32_t)trigger_level_12bit * 3300 / 4096; 
-        tft_print_float(level_mv / 1000.0, 2);
-        tft_Print("V");
-        old_trigger_level_12bit = trigger_level_12bit;
-    }*/
+
    if(old_trigger_level_12bit != trigger_level_12bit || force){
     tft_fillRect(xStart + 330, yPos, 100, 16, BLACK);
     setTextColor(GREEN, BLACK);
@@ -1369,7 +1369,7 @@ else {
 
     // 1. Calcolo del livello relativo allo zero dell'ADC (es. 2048)
     // Sostituisci 'ch1.zero_adc' con la variabile che usi per lo zero del canale sorgente
-    int32_t relative_level = (int32_t)trigger_level_12bit - 2048; 
+    int32_t relative_level = 2048 -(int32_t)trigger_level_12bit; 
 
     // 2. Calcolo in millivolt usando il riferimento reale a 5V (5000mV)
     // Usiamo uint32_t per evitare overflow durante la moltiplicazione
@@ -1622,7 +1622,259 @@ uint16_t calcola_step_trigger(float current_vdiv) {
     
     return 800; // Default per 10V
 }
+//*************** AUTOSET *************************/
+uint8_t cerca_indice_timebase(float periodo) {
+    // Se vogliamo vedere 4 cicli su 10 divisioni:
+    // 1 divisione deve essere = (4 * periodo) / 10 = periodo * 0.4
+    float t_div_ideale = periodo * 0.4f; 
 
+    for (uint8_t i = 0; i < 21; i++) {
+        // Appena troviamo una scala che è >= al nostro ideale, la prendiamo.
+        // Essendo l'ideale basato su 4 cicli, anche se scegliamo quella 
+        // immediatamente superiore, vedremo comunque tra 2 e 4 cicli.
+        if (timebase_seconds[i] >= t_div_ideale) {
+            return i;
+        }
+    }
+    return 20; 
+}
+
+uint8_t cerca_indice_vdiv(float v_div_target) {
+    // Scorriamo dal valore più sensibile (10mV) a quello più sordo (5V)
+    for (uint8_t i = 0; i < 20; i++) {
+        // Se il valore della tabella è maggiore o uguale a quello ideale,
+        // abbiamo trovato la scala che contiene il segnale senza tagliarlo.
+        if (v_div_values[i] >= v_div_target) {
+            return i;
+        }
+    }
+    return (20 - 1); // Default a 5V/div se il segnale è enorme
+}
+
+uint16_t get_vpp_raw_points(Channel *ch) {
+    uint16_t max_adc = 0;
+    uint16_t min_adc = 4095;
+    
+    // Puntiamo al buffer corretto in base al canale passato
+    uint16_t *buffer = (ch == &ch1) ? ch1_buffer : ch2_buffer;
+
+    // Analizziamo un numero sufficiente di campioni per beccare i picchi
+    // 400 punti sono perfetti per coprire l'intera BRAM
+    for (uint16_t i = 0; i < 400; i++) {
+        uint16_t val = buffer[i] & 0x0FFF; // Pulizia 12-bit sempre presente
+
+        if (val > max_adc) max_adc = val;
+        if (val < min_adc) min_adc = val;
+    }
+
+    // Se il segnale è piatto o c'è un errore di inizializzazione
+    if (max_adc <= min_adc) return 0;
+
+    return (max_adc - min_adc);
+}
+
+// Funzione di supporto per scalare il canale fino a riempire lo schermo
+void configura_verticale_smart(Channel *ch, int target_offset) {
+    ch->enabled = true;
+    ch->offset = target_offset;
+    
+    // 1. CATTURA UNICA (L'hardware è fisso, basta una "foto")
+    REG_TRIG = 0x01; 
+    uint16_t timeout = 0;
+    while (!(REG_TRIG & (1 << READY_BIT))) {
+        _delay_us(10);
+        if (++timeout > 5000) break;
+    }
+    osc_read_triggered();
+
+    // 2. CALCOLO VPP REALE IN VOLT
+    uint16_t v_max = 0;
+    uint16_t v_min = 4095;
+    uint16_t *buffer = (ch == &ch1) ? ch1_buffer : ch2_buffer;
+
+    for(int n=0; n<400; n++) {
+        uint16_t val = buffer[n] & 0x0FFF;
+        if(val > v_max) v_max = val;
+        if(val < v_min) v_min = val;
+    }
+
+    // Convertiamo i punti ADC in Volt (Delta totale)
+    // 4096 punti : 10V = vpp_punti : vpp_volt
+    float vpp_volt = ((float)(v_max - v_min) * 10.0f) / 4096.0f;
+
+    // 3. SCELTA DELLA SCALA (Software Zoom)
+    // Vogliamo che il segnale occupi circa 4 divisioni (4 * 30px = 120px)
+    // Formula: pixel = (vpp_volt / volts_div) * 30
+    // Quindi: volts_div = (vpp_volt * 30) / pixel_desiderati
+    float v_div_ideale = (vpp_volt * 30.0f) / 120.0f;
+
+    // Ora cerchiamo nella tua tabella dei VDIV l'indice che più si avvicina
+    // (o il primo valore più grande di v_div_ideale per non saturare visivamente)
+    ch->vdiv_idx = cerca_indice_vdiv(v_div_ideale);
+    
+    // Aggiorniamo il valore reale di volts_div nel canale
+    ch->volts_div = v_div_values[ch->vdiv_idx];
+    
+    // Sincronizziamo l'interfaccia
+    write_encoder((ch == &ch1) ? 1 : 3, ch->vdiv_idx);
+}
+
+bool check_presence(Channel *ch) {
+    // 1. Impostiamo la scala di "ascolto"
+    ch->vdiv_idx = V_DIV_500MV; 
+    write_encoder((ch == &ch1) ? 1 : 3, V_DIV_500MV); 
+    
+    // 2. FORZIAMO UNA CATTURA FRESCA
+    REG_TRIG = 0x01; // Arma l'FPGA
+
+    // Aspettiamo che il READY_BIT salga (il frame deve essere nuovo)
+    uint16_t timeout = 0;
+    while (!(REG_TRIG & (1 << READY_BIT))) {
+        _delay_us(50);
+        timeout++;
+        if (timeout > 2000) break; // 100ms timeout
+    }
+
+    // 3. LEGGIAMO i dati usando la tua funzione originale
+    // Questo aggiorna ch1_buffer o ch2_buffer con dati REALI a 500mV/div
+    osc_read_triggered();
+
+    // 4. Analisi del buffer aggiornato
+    uint16_t vpp_raw = get_vpp_raw_points(ch);
+
+    // Trasformiamo in Volt per decidere se c'è "vita"
+    // (Uso get_vpp_raw_points perché l'hai già scritta ed è veloce)
+    float lsb = (10.0f / 4096.0f) * ch->multiplier;
+    float vpp = (float)vpp_raw * lsb;
+
+    // Se vpp > 50mV, il canale è considerato attivo
+    return (vpp > 0.050f);
+}
+#define POSIZIONE_TOP 115
+#define POSIZIONE_BOTTOM 175
+#define POSIZIONE_CENTER 145
+
+void routine_autoset_dual() {
+
+    conf_encoder(); // Assicuriamoci che gli encoder siano configurati correttamente prima di leggere i valori
+    // 1. Fase di Pre-analisi: Capire chi è vivo
+    // Impostiamo una scala cautelativa per il check (es. 1V/div)
+ current_time_base_idx = T_DIV_50US; 
+    set_base_time(T_DIV_50US);
+    write_encoder(4, T_DIV_50US);
+
+    // 1. Fase di Pre-analisi
+    ch1.vdiv_idx = V_DIV_1V; 
+    ch2.vdiv_idx = V_DIV_1V;
+    write_encoder(1, V_DIV_1V); 
+    write_encoder(3, V_DIV_1V); 
+    
+    trigger_source = 1;
+    trigger_mode = TRIG_MODE_AUTO; // Fondamentale per non bloccare l'FSM
+    set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
+    
+    trigger_level_12bit = 2048;
+    set_trigger_level(trigger_level_12bit);
+    write_encoder(5, TRIG_C_VAL); 
+
+    // --- RESET ACQUISIZIONE ---
+    // Diamo un colpo di reset alla FSM dell'FPGA per farla partire con i nuovi dati
+    //REG_TRIG = 0x00; 
+    _delay_ms(10);
+    REG_TRIG = 0x01; 
+
+    _delay_ms(50);
+
+    bool signal_A = check_presence(&ch1);
+    bool signal_B = check_presence(&ch2);
+
+    // Se tutto è morto, torniamo a una visualizzazione standard
+    if (!signal_A && !signal_B) {
+        ch1.vdiv_idx = V_DIV_1V;
+        ch2.vdiv_idx = V_DIV_1V;
+        write_encoder(1, V_DIV_1V); // Aggiorna gli encoder per riflettere questa scelta
+        write_encoder(3, V_DIV_1V); // Aggiorna gli encoder per riflettere questa scelta
+        ch1.enabled = true;
+        ch2.enabled = false;
+        ch1.offset = OFFSET_Y1_C_VAL; // Centro schermo (assumendo 200px di altezza)
+        write_encoder(1, V_DIV_1V); // Aggiorna gli encoder per riflettere questa scelta
+        current_time_base_idx = T_BASE_1MS;
+        write_encoder(4, T_BASE_1MS); // Aggiorna l'encoder della base dei tempi
+        set_base_time(T_BASE_1MS);
+
+        //REG_TRIG = 0x01;    // Armiamo la FSM FPGA
+
+        return;
+    }
+
+    // 2. Configurazione Verticale (Scale e Posizioni)
+    if (signal_A && signal_B) {
+        // Entrambi attivi: dividiamo lo schermo (Top e Bottom)
+        configura_verticale_smart(&ch1, 85); // Canale 1 in alto
+        configura_verticale_smart(&ch2, 205);  // Canale 2 in basso
+    } 
+    else if (signal_A) {
+        ch1.enabled = true;
+        ch2.enabled = false;
+        configura_verticale_smart(&ch1, 100); // Canale 1 al centro
+    }
+    else if (signal_B) {
+        ch1.enabled = false;
+        ch2.enabled = true;
+        configura_verticale_smart(&ch2, 100); // Canale 2 al centro
+    }
+
+    // 3. Configurazione Orizzontale (Base Tempi)
+    // Scegliamo la frequenza di riferimento per la base tempi
+    float freq_ref = 0;
+    /*if (signal_A) freq_ref = read_fpga_frequency_ch1(); // O la tua funzione freq
+    else freq_ref = read_fpga_frequency_ch2();*/
+    if(signal_A){ 
+        set_trigger_mode(trigger_mode, trigger_slope, 1); // Agganciamo il trigger al canale 
+        _delay_ms(500); // Tempo tecnico per stabilizzare la lettura dopo aver cambiato il trigger source
+        freq_ref = read_fpga_frequency(); // O la tua funzione freq
+    }
+    else {
+        set_trigger_mode(trigger_mode, trigger_slope, 2); // Agganciamo il trigger al canale 
+        _delay_ms(500); // Tempo tecnico per stabilizzare la lettura dopo aver cambi
+        freq_ref = read_fpga_frequency(); // O la tua funzione freq
+    }
+
+
+
+    if (freq_ref > 0.5f) {
+        float periodo = 1.0f / freq_ref;
+        // Vogliamo vedere circa 3 cicli su 10 divisioni
+        float t_div_target = (3.0f * periodo) / 10.0f;
+        
+        // Cerchiamo l'indice che più si avvicina (funzione da definire sotto)
+        current_time_base_idx = cerca_indice_timebase(t_div_target);
+    } else {
+        current_time_base_idx = T_BASE_10MS; // Default se segnale lentissimo
+    }
+
+    // 4. Configurazione Trigger
+    // Agganciamo il trigger al canale principale trovato
+    trigger_level_12bit = 2048; // Centrato (0V)
+    if (signal_A) {
+        trigger_source = 1;
+    } else {
+        trigger_source = 2;
+    }
+
+    set_trigger_level(trigger_level_12bit);
+    write_encoder(5, TRIG_C_VAL); // Aggiorna l'encoder del trigger level
+    trigger_mode = 0; // Imposta in AUTO per sicurezza
+    trigger_slope = 0; // Rising edge
+    set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
+
+    // Alla fine di routine_autoset_dual()
+    set_base_time(current_time_base_idx); // Invia la nuova base tempi all'FPGA
+    write_encoder(4, current_time_base_idx);
+    REG_TRIG = 0x01; // Riautomatizza l'acquisizione
+
+}
+/*********************AUTOSET END *****************/
 // --- main loop ---
 void scope_main(void)
 {
@@ -1635,7 +1887,7 @@ void scope_main(void)
     drawStaticInterface();
     update_status_bar(true);
     set_base_time(19);
-    //set_dds_frequency(0x11111111); 
+
     set_trigger_level(trigger_level_12bit);   
     set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
     
@@ -1668,11 +1920,10 @@ void scope_main(void)
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
-                case 20: // Tasto PAN 
-                    if(currentMenu == MENU_PAN) view_offset = 0; //Riporta in centro
-                    else{
-                        
-                    }
+                case 2: // Tasto AUTOSET
+                     routine_autoset_dual();
+                     updateSidebarLabels(); // Aggiorna le label dopo l'autoset
+                    
                     break;
                 case KEY_RUN:
                     if(trigger_mode == TRIG_MODE_SINGLE)

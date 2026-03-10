@@ -142,19 +142,19 @@ set_location_assignment PIN_P9 -to ENC_TBASE_A
 set_location_assignment PIN_J13 -to ENC_CH_1_POS_B
 set_location_assignment PIN_M10 -to ENC_CH_1_POS_K
 set_location_assignment PIN_J16 -to ENC_CH_1_POS_A
-set_location_assignment PIN_N9 -to ENC_CH_1_GAIN_B
-set_location_assignment PIN_L16 -to ENC_CH_1_GAIN_A
-set_location_assignment PIN_N15 -to ENC_CH_2_POS_B
+set_location_assignment PIN_L16 -to ENC_CH_1_GAIN_B
+set_location_assignment PIN_N9 -to ENC_CH_1_GAIN_A
+set_location_assignment PIN_L14 -to ENC_CH_2_POS_B
 set_location_assignment PIN_R14 -to ENC_CH_2_POS_K
-set_location_assignment PIN_L14 -to ENC_CH_2_POS_A
-set_location_assignment PIN_P15 -to ENC_CH_2_GAIN_B
-set_location_assignment PIN_P16 -to ENC_CH_2_GAIN_A
-set_location_assignment PIN_R10 -to ENC_TRIG_POS_B
+set_location_assignment PIN_N15 -to ENC_CH_2_POS_A
+set_location_assignment PIN_P16 -to ENC_CH_2_GAIN_B
+set_location_assignment PIN_P15 -to ENC_CH_2_GAIN_A
+set_location_assignment PIN_N12 -to ENC_TRIG_POS_B
 set_location_assignment PIN_P11 -to ENC_TRIG_POS_K
-set_location_assignment PIN_N12 -to ENC_TRIG_POS_A
-set_location_assignment PIN_R16 -to ENC_PAN_POS_B
+set_location_assignment PIN_R10 -to ENC_TRIG_POS_A
+set_location_assignment PIN_L15 -to ENC_PAN_POS_B
 set_location_assignment PIN_K16 -to ENC_PAN_POS_K
-set_location_assignment PIN_L15 -to ENC_PAN_POS_A
+set_location_assignment PIN_R16 -to ENC_PAN_POS_A
 set_location_assignment PIN_N16 -to tft_backlight
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to KEY_ROWS[1]
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to KEY_ROWS[2]
