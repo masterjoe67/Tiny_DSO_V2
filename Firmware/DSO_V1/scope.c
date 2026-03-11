@@ -1254,7 +1254,7 @@ void update_status_bar(bool force) {
     uint16_t yPos = MARGIN_Y + TRACE_H + 10;
     uint16_t xStart = MARGIN_X;
     setTextSize(1);
-
+    tft_printAt("Mje", 10, 5, GREEN, DARKGREY, 2);
     static ui_status_t last_ui_state = 0xFF; // Valore impossibile per forzare il primo disegno
     ui_status_t current_state = get_system_status_code();
     if (force || current_state != last_ui_state) {
@@ -1623,6 +1623,28 @@ uint16_t calcola_step_trigger(float current_vdiv) {
     return 800; // Default per 10V
 }
 //*************** AUTOSET *************************/
+void init_timer_polling() {
+// 1. Modalità Normale (Normal Mode)
+    // Su ATmega128, mettendo TCCR0 a 0 si imposta la modalità normale 
+    // e si scollegano i pin OC0 (no PWM).
+    TCCR0 = 0; 
+
+    // 2. Reset del contatore (8 bit: 0-255)
+    TCNT0 = 0;
+
+    // 3. Pulizia flag di overflow nel registro TIFR generico
+    // Si scrive 1 sul bit TOV0 per resettarlo.
+    TIFR |= (1 << TOV0);
+
+    // 4. Impostazione Prescaler e avvio
+    // A 60 MHz, per non far scappare il timer troppo velocemente,
+    // usiamo il prescaler 256. 
+    // Bit CS02=1, CS01=1, CS00=0 (secondo datasheet ATmega128)
+    TCCR0 = (1 << CS02) | (1 << CS01);
+}
+
+
+
 uint8_t cerca_indice_timebase(float periodo) {
     // Se vogliamo vedere 4 cicli su 10 divisioni:
     // 1 divisione deve essere = (4 * periodo) / 10 = periodo * 0.4
@@ -1750,16 +1772,64 @@ bool check_presence(Channel *ch) {
     // Se vpp > 50mV, il canale è considerato attivo
     return (vpp > 0.050f);
 }
-#define POSIZIONE_TOP 115
-#define POSIZIONE_BOTTOM 175
-#define POSIZIONE_CENTER 145
+
+void draw_autoset_message() {
+    // Coordinate del box (ipotizzando uno schermo 320x240)
+    // Regola questi valori in base alla tua risoluzione reale
+    int16_t box_w = 140;
+    int16_t box_h = 40;
+    int16_t box_x = (400 - box_w) / 2; 
+    int16_t box_y = (240 - box_h) / 2;
+
+    // 1. Disegna il background del box (nero per coprire le tracce vecchie)
+    tft_fillRect(box_x + MARGIN_X, box_y + MARGIN_Y, box_w, box_h, BLACK);
+
+    // 2. Disegna la cornice (magari gialla o verde per dare l'idea di sistema attivo)
+    tft_drawRect(box_x + MARGIN_X, box_y + MARGIN_Y, box_w, box_h, YELLOW);
+    tft_drawRect(box_x + 2 + MARGIN_X, box_y + 2 + MARGIN_Y, box_w - 4, box_h - 4, YELLOW); // Doppia cornice pro
+
+    // 3. Scritta "AUTOSET" centrata
+    setTextSize(2); // Dimensione leggibile
+    //tft_printAt("AUTOSET", box_x + 25 + MARGIN_X, box_y + 12 + MARGIN_Y, WHITE, DARKGREY, 2);
+    tft_printCenteredX("AUTOSET", box_x + 2 + MARGIN_X, box_x + 2 + MARGIN_X + box_w - 4, box_y + 12 + MARGIN_Y, ORANGE, BLACK, 2);
+    
+    // Se la tua libreria lo richiede, forza l'invio al display
+    // tft.display(); 
+}
+
+void attesa_campionamento_ms(uint16_t ms) {
+    // 1. Assicuriamoci che il Timer0 usi il clock di sistema (60MHz) e non l'RTC
+    ASSR &= ~(1 << AS0); 
+
+    for (uint16_t i = 0; i < ms; i++) {
+        // 2. Prepariamo il timer
+        TCNT0 = (256 - 234); // Pre-carico per 1ms (60MHz/256 prescaler)
+        
+        // Reset flag overflow: nell'ATmega128 si scrive 1 su TOV0 in TIFR
+        TIFR |= (1 << TOV0); 
+
+        // 3. Avvio Timer con Prescaler 256
+        // Bit CS02=1, CS01=1, CS00=0 per ATmega128
+        TCCR0 = (1 << CS02) | (1 << CS01); 
+
+        // 4. Polling attivo
+        while (!(TIFR & (1 << TOV0))) {
+            osc_read_triggered();
+            read_fpga_frequency();
+            // Debug estremo: se non esce, stiamo leggendo il registro sbagliato
+        }
+
+        // 5. Fermiamo il timer
+        TCCR0 = 0; 
+    }
+}
 
 void routine_autoset_dual() {
-
+    draw_autoset_message(); // Mostriamo un messaggio chiaro all'utente durante l'autoset
     conf_encoder(); // Assicuriamoci che gli encoder siano configurati correttamente prima di leggere i valori
     // 1. Fase di Pre-analisi: Capire chi è vivo
     // Impostiamo una scala cautelativa per il check (es. 1V/div)
- current_time_base_idx = T_DIV_50US; 
+    current_time_base_idx = T_DIV_50US; 
     set_base_time(T_DIV_50US);
     write_encoder(4, T_DIV_50US);
 
@@ -1780,7 +1850,7 @@ void routine_autoset_dual() {
     // --- RESET ACQUISIZIONE ---
     // Diamo un colpo di reset alla FSM dell'FPGA per farla partire con i nuovi dati
     //REG_TRIG = 0x00; 
-    _delay_ms(10);
+    _delay_ms(1000);
     REG_TRIG = 0x01; 
 
     _delay_ms(50);
@@ -1798,9 +1868,9 @@ void routine_autoset_dual() {
         ch2.enabled = false;
         ch1.offset = OFFSET_Y1_C_VAL; // Centro schermo (assumendo 200px di altezza)
         write_encoder(1, V_DIV_1V); // Aggiorna gli encoder per riflettere questa scelta
-        current_time_base_idx = T_BASE_1MS;
-        write_encoder(4, T_BASE_1MS); // Aggiorna l'encoder della base dei tempi
-        set_base_time(T_BASE_1MS);
+        current_time_base_idx = T_DIV_10US;
+        write_encoder(4, T_DIV_10US); // Aggiorna l'encoder della base dei tempi
+        set_base_time(T_DIV_10US);
 
         //REG_TRIG = 0x01;    // Armiamo la FSM FPGA
 
@@ -1825,21 +1895,38 @@ void routine_autoset_dual() {
     }
 
     // 3. Configurazione Orizzontale (Base Tempi)
+
     // Scegliamo la frequenza di riferimento per la base tempi
     float freq_ref = 0;
     /*if (signal_A) freq_ref = read_fpga_frequency_ch1(); // O la tua funzione freq
     else freq_ref = read_fpga_frequency_ch2();*/
     if(signal_A){ 
         set_trigger_mode(trigger_mode, trigger_slope, 1); // Agganciamo il trigger al canale 
-        _delay_ms(500); // Tempo tecnico per stabilizzare la lettura dopo aver cambiato il trigger source
-        freq_ref = read_fpga_frequency(); // O la tua funzione freq
+        _delay_ms(100); // Tempo tecnico per stabilizzare la lettura dopo aver cambiato il trigger source
+        //freq_ref = read_fpga_frequency(); // O la tua funzione freq
     }
     else {
         set_trigger_mode(trigger_mode, trigger_slope, 2); // Agganciamo il trigger al canale 
-        _delay_ms(500); // Tempo tecnico per stabilizzare la lettura dopo aver cambi
-        freq_ref = read_fpga_frequency(); // O la tua funzione freq
+        _delay_ms(100); // Tempo tecnico per stabilizzare la lettura dopo aver cambi
+        //freq_ref = read_fpga_frequency(); // O la tua funzione freq
     }
 
+        // FORZIAMO UNA CATTURA FRESCA
+    REG_TRIG = 0x01; // Arma l'FPGA
+
+    // Aspettiamo che il READY_BIT salga (il frame deve essere nuovo)
+    uint16_t timeout = 0;
+    while (!(REG_TRIG & (1 << READY_BIT))) {
+        _delay_us(50);
+        timeout++;
+        if (timeout > 2000) break; // 100ms timeout
+    }
+
+    // 3. LEGGIAMO i dati usando la tua funzione originale
+    // Questo aggiorna ch1_buffer o ch2_buffer con dati REALI a 500mV/div
+    attesa_campionamento_ms(1000); // Attende 500ms campionando continuamente (e aggiornando i buffer) per avere dati freschi e stabili
+
+    freq_ref = read_fpga_frequency();
 
 
     if (freq_ref > 0.5f) {
@@ -1872,6 +1959,7 @@ void routine_autoset_dual() {
     set_base_time(current_time_base_idx); // Invia la nuova base tempi all'FPGA
     write_encoder(4, current_time_base_idx);
     REG_TRIG = 0x01; // Riautomatizza l'acquisizione
+    tft_fillRect(MARGIN_X, MARGIN_Y, 400, 240, BLACK); // Pulisce tutto lo schermo per rimuovere i fantasmi dell'autoset    
 
 }
 /*********************AUTOSET END *****************/
@@ -1881,7 +1969,7 @@ void scope_main(void)
     uint8_t key, rep;
     uint8_t new_sel;
     //uint16_t new_trigger_level;
-    
+    init_timer_polling();
     init_channels();
     conf_encoder();
     drawStaticInterface();
@@ -1900,7 +1988,7 @@ void scope_main(void)
     aggiorna_parametri_hw(&ch2);
 
     scope_set_hysteresis(20); // Imposta un valore di default per l'isteresi
-    //configure_encoder(5, PARAM_STEP, calcola_step_trigger(current_enc));
+    update_status_bar(true);
 
    while(1)
     {
