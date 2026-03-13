@@ -936,16 +936,20 @@ void tft_printCenteredX(const char *str, int16_t xStart, int16_t xEnd, int16_t y
     if (len == 0) return; // Evitiamo calcoli inutili
 
     if (font == 2) {
-        #ifdef LOAD_FONT2
-        for (uint16_t i = 0; i < len; i++) {
-            uint8_t uniCode = str[i];
-            // Sommiamo la larghezza del carattere + 1 pixel di spazio
-            textWidth += pgm_read_byte(widtbl_f16 + uniCode);
-        }
-        // Togliamo l'ultimo pixel di spazio aggiunto in eccesso dopo l'ultima lettera
-        textWidth--; 
-        #endif
-    } else {
+    #ifdef LOAD_FONT2
+    for (uint16_t i = 0; i < len; i++) {
+        uint8_t uniCode = (uint8_t)str[i];
+
+        // PROTEZIONE: Se il carattere è inferiore allo spazio (ASCII 32), ignoralo o usa 32
+        if (uniCode < 32) uniCode = 32;
+
+        // Sottrai 32 perché la tabella widtbl_f16 solitamente inizia dallo spazio
+        // Se continua a sballare, prova a controllare il file del font per vedere l'offset
+        textWidth += pgm_read_byte(widtbl_f16 + (uniCode - 32));
+    }
+    textWidth--; 
+    #endif
+} else {
         // Per il Font 1, di solito è 6 pixel totali (5 carattere + 1 spazio)
         textWidth = (len * 6 * font) - 1; 
     }

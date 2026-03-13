@@ -83,4 +83,11 @@ void update_all_encoders() {
     }
 }
 
+void setup_encoder(uint8_t id, int16_t value, int16_t min, int16_t max, int16_t step) {
+    configure_encoder(id, PARAM_MIN, min);
+    configure_encoder(id, PARAM_MAX, max);
+    configure_encoder(id, PARAM_STEP, step);
+    configure_encoder(id, PARAM_C_VAL, value);
+}
+
 

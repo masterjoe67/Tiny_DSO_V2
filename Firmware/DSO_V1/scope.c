@@ -110,6 +110,15 @@ Point_t gnd_mark_a[2] = {{ 0, 0 }, { 0, 0 }};
 Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
 Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
 
+// Variabili di stato cursori
+CursorType cursor_type = CUR_OFF;
+uint8_t cursor_source = 1; // 1 = CH1, 2 = CH2
+uint8_t cursor_select = 0; // 0 = A, 1 = B, 2 = Entrambi
+
+// Posizioni in pixel (0-400 o 0-240 a seconda dell'asse)
+int16_t cursor_v_a = 50, cursor_v_b = 150; // Per Tensione
+int16_t cursor_h_a = 100, cursor_h_b = 300; // Per Tempo
+
 
 const char* time_base_labels[] = {
     "250ns", "500ns", "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
@@ -204,58 +213,6 @@ void aggiorna_parametri_hw(Channel *ch) {
     }
 }
 
-
-
-// Algoritmo Integer Square Root (veloce per AVR)
-uint32_t isqrt(uint32_t n) {
-    uint32_t res = 0;
-    uint32_t bit = 1UL << 30; // Il bit più alto possibile
-
-    // "bit" parte dalla potenza di 4 più alta <= n
-    while (bit > n) bit >>= 2;
-
-    while (bit != 0) {
-        if (n >= res + bit) {
-            n -= res + bit;
-            res = (res >> 1) + bit;
-        } else {
-            res >>= 1;
-        }
-        bit >>= 2;
-    }
-    return res;
-}
-
-void calculate_measures(int16_t *buffer, uint16_t size) {
-    uint32_t sum_sq = 0;   // Per il calcolo RMS (v^2)
-    int32_t  sum_raw = 0;  // Per il valore medio
-    int16_t  max_v = -2048; // Assumendo dati bipolari o centrati
-    int16_t  min_v =  2047;
-
-    for (uint16_t i = 0; i < size; i++) {
-        int16_t val = buffer[i];
-
-        // 1. Ricerca Min/Max per Vpp
-        if (val > max_v) max_v = val;
-        if (val < min_v) min_v = val;
-
-        // 2. Accumulo per Media
-        sum_raw += val;
-
-        // 3. Accumulo quadrati per RMS
-        // Usiamo i 32 bit perché 2048^2 = 4.194.304 (ci sta largo)
-        sum_sq += (uint32_t)((int32_t)val * val);
-    }
-
-    // Risultati finali scritti direttamente in XRAM
-    misure->vpp  = max_v - min_v;
-    misure->vavg = sum_raw / size;
-    
-    // RMS = Radice quadrata della media dei quadrati
-    // La funzione sqrt() di avr-libc è ottimizzata
-    misure->vrms = (uint16_t)sqrt((double)sum_sq / size);
-}
-
 void aggiorna_registri_dds(uint32_t reg_val) {
     // Scrittura diretta byte per byte agli indirizzi mappati nell'FPGA
     XRAM_WRITE(0x4020, (uint8_t)(reg_val & 0xFF));         // LSB
@@ -290,8 +247,6 @@ void set_base_time(uint8_t index) {
     aggiorna_t_div(index);
 }
 
-
-
 void set_dds_frequency(uint32_t sample_rate) {
     // Calcolo del valore di incremento per il DDS
     // Formula: (F_sample / 60MHz) * 2^32
@@ -306,8 +261,6 @@ void set_dds_frequency(uint32_t sample_rate) {
     XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 16) & 0xFF)); // Byte 2
     XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 24) & 0xFF)); // Byte 3 (MSB -> Trigger update)
 }
-
-
 
 void set_trigger_level(uint16_t level12)
 {
@@ -467,25 +420,23 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
     }
 }
 
-void osc_wait_ready(void)
-{
-    // Bit READY già implementato in lettura da REG_TRIG o bit dedicato
-    while (!(REG_TRIG & (1 << READY_BIT))) {
-        // attesa attiva finché READY non diventa 1
-        
-    }
-}
-
-void rearm(){
-    if (trigger_mode == TRIG_MODE_SINGLE && freeze){
-        REG_TRIG = 0x01;
-        freeze = false;
-    }
-}
-
 static inline void osc_arm_readout(void)
 {
     REG_INDEX = 0;
+}
+
+void disegna_linea_cursore_v(int16_t y, uint16_t colore) {
+    // Disegna una linea orizzontale tratteggiata (asse X: 0-400)
+    for (int16_t x = 0; x < 400; x += 8) {
+        tft_drawFastHLine(MARGIN_X + x, y, 4, colore); // Disegna 4 pixel, ne salta 4
+    }
+}
+
+void disegna_linea_cursore_h(int16_t x, uint16_t colore) {
+    // Disegna una linea verticale tratteggiata (asse Y: 0-240)
+    for (int16_t y = 0; y < 240; y += 8) {
+        tft_drawFastVLine(x, MARGIN_Y + y, 4, colore);
+    }
 }
 
 void tft_drawGrid(uint16_t color) {
@@ -680,6 +631,205 @@ void draw_ground_marker(Channel *ch) {
     }
 }
 
+/********************CURSORS***********************/
+
+
+
+// Assicurati che queste siano FUORI dalla funzione (Globali/Statiche)
+static uint8_t old_cursor_type = CUR_OFF;
+static int16_t old_v_a = -1, old_v_b = -1;
+static int16_t old_h_a = -1, old_h_b = -1;
+static char str_ta[20];
+static char str_tb[20];
+
+
+void calcola_e_stampa_dati_cursori() {
+    if (cursor_type == CUR_OFF) return;
+
+    // --- VARIABILI STATICHE PER MEMORIA ---
+    static int16_t last_v_a = -32000, last_v_b = -32000;
+    static int16_t last_h_a = -32000, last_h_b = -32000;
+    static float last_vdiv1 = -1, last_vdiv2 = -1;
+    static float last_tdiv = -1;
+    static uint8_t last_type = 255;
+    static uint8_t last_source = 255;
+
+    // --- RILEVAMENTO CAMBIAMENTI ---
+    Channel *ch = (cursor_source == 1) ? &ch1 : &ch2;
+    bool changed = (cursor_type != last_type) || (cursor_source != last_source) ||
+                   (ch->volts_div != (cursor_source == 1 ? last_vdiv1 : last_vdiv2)) ||
+                   (timebase_seconds[current_time_base_idx] != last_tdiv);
+
+    if (cursor_type == CUR_VOLT) {
+        if (cursor_v_a != last_v_a || cursor_v_b != last_v_b || changed) {
+            float inv = (ch->inverted) ? -1.0 : 1.0;
+            float v_per_px = (ch->volts_div / 25.0) * inv;
+            float va = (float)(ch->offset - cursor_v_a) * v_per_px;
+            float vb = (float)(ch->offset - cursor_v_b) * v_per_px;
+            float dv = va - vb;
+            char buf[24], val_str[12];
+
+            // V(A)
+            dtostrf(va, 1, 2, val_str);
+            sprintf(buf, "%c%sV", (va >= 0 ? '+' : ' '), val_str); // Spazio se negativo per allineamento
+            drawTextButton(3, buf, "", WHITE);
+
+            // V(B)
+            dtostrf(vb, 1, 2, val_str);
+            sprintf(buf, "%c%sV", (vb >= 0 ? '+' : ' '), val_str);
+            drawTextButton(4, buf, "", WHITE);
+
+            // Delta V
+            dtostrf(dv, 1, 2, val_str);
+            sprintf(buf, "%c%sV", (dv >= 0 ? '+' : ' '), val_str);
+            drawTextButton(2, buf, "", WHITE);
+
+            // Aggiorna memoria
+            last_v_a = cursor_v_a; last_v_b = cursor_v_b;
+        }
+    } 
+    else if (cursor_type == CUR_TIME) {
+        if (cursor_h_a != last_h_a || cursor_h_b != last_h_b || changed) {
+            float current_tb = timebase_seconds[current_time_base_idx]; 
+            float t_per_px = current_tb / 40.0; 
+            float ta = (float)(cursor_h_a - 200) * t_per_px;
+            float tb = (float)(cursor_h_b - 200) * t_per_px;
+            float dt = ta - tb;
+            float abs_dt = (dt < 0) ? -dt : dt;
+
+            // T(A) e T(B)
+            float tempi[2] = {ta, tb};
+            char* targets[2] = {str_ta, str_tb};
+            for(int i = 0; i < 2; i++) {
+                float abs_t = (tempi[i] < 0) ? -tempi[i] : tempi[i];
+                char n_buf[12];
+                if (abs_t < 0.000001f) {
+                    dtostrf(abs_t * 1e9, 1, 0, n_buf);
+                    sprintf(targets[i], "%c%s ns", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                } else if (abs_t < 0.001f) {
+                    dtostrf(abs_t * 1e6, 1, 2, n_buf);
+                    sprintf(targets[i], "%c%s us", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                } else {
+                    dtostrf(abs_t * 1e3, 1, 2, n_buf);
+                    sprintf(targets[i], "%c%s ms", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                }
+            }
+            drawTextButton(3, str_ta, "", WHITE);
+            drawTextButton(4, str_tb, "", WHITE);
+
+            // Delta T
+            char dt_buf[24], n_buf[12];
+            if (abs_dt < 0.000001f) {
+                dtostrf(abs_dt * 1e9, 1, 0, n_buf);
+                sprintf(dt_buf, "%s ns", n_buf);
+            } else if (abs_dt < 0.001f) {
+                dtostrf(abs_dt * 1e6, 1, 2, n_buf);
+                sprintf(dt_buf, "%s us", n_buf);
+            } else {
+                dtostrf(abs_dt * 1e3, 1, 2, n_buf);
+                sprintf(dt_buf, "%s ms", n_buf);
+            }
+
+            // Frequenza
+            char f_buf[20], f_num[12];
+            if (abs_dt > 0) {
+                float freq = 1.0f / abs_dt;
+                if (freq >= 1000000.0f) {
+                    dtostrf(freq / 1e6, 1, 1, f_num);
+                    sprintf(f_buf, "%s MHz", f_num);
+                } else if (freq >= 1000.0f) {
+                    dtostrf(freq / 1e3, 1, 1, f_num);
+                    sprintf(f_buf, "%s KHz", f_num);
+                } else {
+                    dtostrf(freq, 1, 1, f_num);
+                    sprintf(f_buf, "%s Hz", f_num);
+                }
+            } else {
+                sprintf(f_buf, "--- Hz");
+            }
+            
+            drawTextButton(2, dt_buf, f_buf, WHITE);
+
+            // Aggiorna memoria
+            last_h_a = cursor_h_a; last_h_b = cursor_h_b;
+        }
+    }
+
+    // Sincronizza stati globali
+    last_type = cursor_type;
+    last_source = cursor_source;
+    last_vdiv1 = ch1.volts_div;
+    last_vdiv2 = ch2.volts_div;
+    last_tdiv = timebase_seconds[current_time_base_idx];
+}
+
+void aggiorna_grafica_cursori() {
+    // Variabili statiche per mantenere la memoria tra un ciclo e l'altro
+    static uint8_t old_type = CUR_OFF;
+    static int16_t ov_a = -1, ov_b = -1, oh_a = -1, oh_b = -1;
+
+    // --- 1. CONTROLLO UNIVOCO PER LA CANCELLAZIONE ---
+    // Questo blocco viene eseguito SOLO quando cambiamo modalità (es. da VOLT a OFF)
+    if (cursor_type != old_type) {
+        
+        // Se il modo precedente era attivo, cancelliamo tutto prima di cambiare
+        if (old_type == CUR_VOLT) {
+            if (ov_a != -1) disegna_linea_cursore_v(ov_a, BLACK);
+            if (ov_b != -1) disegna_linea_cursore_v(ov_b, BLACK);
+        } 
+        else if (old_type == CUR_TIME) {
+            if (oh_a != -1) disegna_linea_cursore_h(oh_a, BLACK);
+            if (oh_b != -1) disegna_linea_cursore_h(oh_b, BLACK);
+        }
+
+        // Aggiorniamo il vecchio tipo con quello attuale
+        old_type = cursor_type;
+
+        // Reset delle posizioni memorizzate
+        ov_a = -1; ov_b = -1;
+        oh_a = -1; oh_b = -1;
+
+        // Se siamo passati a OFF, abbiamo finito la cancellazione e usciamo
+        if (cursor_type == CUR_OFF) return;
+    }
+
+    // --- 2. FILTRO DI ESECUZIONE ---
+    // Se i cursori sono spenti (e abbiamo già gestito la cancellazione sopra),
+    // non eseguiamo nient'altro per risparmiare cicli CPU (importante a 60MHz).
+    if (cursor_type == CUR_OFF) return;
+
+    // --- 3. LOGICA DI DISEGNO DINAMICO (Solo se cursor_type != OFF) ---
+    if (cursor_type == CUR_VOLT) {
+        // Cursore A
+        if (cursor_v_a != ov_a) {
+            if (ov_a != -1) disegna_linea_cursore_v(ov_a, BLACK);
+            disegna_linea_cursore_v(cursor_v_a, WHITE);
+            ov_a = cursor_v_a;
+        }
+        // Cursore B
+        if (cursor_v_b != ov_b) {
+            if (ov_b != -1) disegna_linea_cursore_v(ov_b, BLACK);
+            disegna_linea_cursore_v(cursor_v_b, WHITE);
+            ov_b = cursor_v_b;
+        }
+    } 
+    else if (cursor_type == CUR_TIME) {
+        // Cursore A
+        if (cursor_h_a != oh_a) {
+            if (oh_a != -1) disegna_linea_cursore_h(oh_a, BLACK);
+            disegna_linea_cursore_h(cursor_h_a, WHITE);
+            oh_a = cursor_h_a;
+        }
+        // Cursore B
+        if (cursor_h_b != oh_b) {
+            if (oh_b != -1) disegna_linea_cursore_h(oh_b, BLACK);
+            disegna_linea_cursore_h(cursor_h_b, WHITE);
+            oh_b = cursor_h_b;
+        }
+    }
+    calcola_e_stampa_dati_cursori();
+}
+
 void acquire_and_draw(){
     // 1. ACQUISIZIONE (Condizionale)
     // Proviamo a leggere solo se siamo in RUN o in un SINGLE attivo
@@ -700,20 +850,36 @@ void acquire_and_draw(){
     draw_ground_marker(&ch1);
     draw_ground_marker(&ch2);
     drawPanTrack();
+    aggiorna_grafica_cursori();
+    
+}
+
+void drawTextButton(uint8_t index, const char* data1, const char* data2, uint16_t color) {
+    uint16_t y = 25 + (index * 50); // Calcola posizione Y in base all'indice
+    uint16_t bgColor = BLACK;       // Definiamo lo sfondo fisso a nero
+    
+    tft_fillRect(410, y + 12, 68, 38, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
+    // 1. Disegna la cornice del bottone
+    //tft_drawRect(410, y, 65, 40, color);
+    //tft_drawFastHLine(415, y, 58, color); // Linea di divisione orizzontale
+
+    // 3. Scrivi il testo passando tutti i parametri richiesti dalla tua funzione
+    tft_printCenteredX(data1, 410, 479, y + 15, color, bgColor, 2); 
+    tft_printCenteredX(data2, 410, 479, y + 32, color, bgColor, 2);
 }
 
 void drawMenuButton(uint8_t index, const char* label, const char* data, bool active, uint16_t color) {
     uint16_t y = 25 + (index * 50); // Calcola posizione Y in base all'indice
     uint16_t bgColor = BLACK;       // Definiamo lo sfondo fisso a nero
     
-    tft_fillRect(410, y, 65, 40, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
+    tft_fillRect(410, y, 68, 48, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
     // 1. Disegna la cornice del bottone
-    tft_drawRect(410, y, 65, 40, color);
-    
+    //tft_drawRect(410, y, 65, 40, color);
+    tft_drawFastHLine(415, y, 58, color); // Linea di divisione orizzontale
 
     // 3. Scrivi il testo passando tutti i parametri richiesti dalla tua funzione
-    tft_printCenteredX(label, 410, 475, y + 5, color, bgColor, 1); 
-    tft_printCenteredX(data, 410, 475, y + 20, color, bgColor, 2);
+    tft_printCenteredX(label, 410, 479, y + 5, color, bgColor, 1); 
+    tft_printCenteredX(data, 410, 479, y + 20, color, bgColor, 2);
 }
 
 void drawStaticInterface() {
@@ -721,7 +887,7 @@ void drawStaticInterface() {
     tft_fillScreen(BLACK);
     
     // 2. Barra Superiore (Status e Misure rapide)
-    tft_fillRect(0, 0, 480, 20, DARKGREY);
+    tft_fillRect(0, 0, 409, 20, DARKGREY);
     tft_printAt("Mje", 10, 5, GREEN, DARKGREY, 2);
     //tft_printAt("T: 100uS", 120, 5, WHITE, DARKGREY);
     //tft_printAt("Vpp: 3.24V", 250, 5, YELLOW, DARKGREY);
@@ -740,6 +906,8 @@ void drawStaticInterface() {
     
     // 4. Linea di divisione Sidebar
     tft_drawLine(SIDEBAR_X - 2, 20, SIDEBAR_X - 2, TRACE_H + MARGIN_Y, GREY);
+
+    
 
     updateSidebarLabels(); // Aggiorna tutte le etichette in base allo stato attuale (usa i dati nelle struct)
     // 6. Ripristina la griglia
@@ -857,16 +1025,24 @@ void cycleProbe(Channel *ch)
 void set_trig_enc_default()
 {
     current_enc_mode = ENC_MODE_TRIGGER_LEVEL;
-    configure_encoder(5, PARAM_MIN, TRIG_MIN);
+    setup_encoder(5, trigger_level_12bit, TRIG_MIN, TRIG_MAX, TRIG_STEP);
+    /*configure_encoder(5, PARAM_MIN, TRIG_MIN);
     configure_encoder(5, PARAM_MAX, TRIG_MAX);
     configure_encoder(5, PARAM_STEP, TRIG_STEP);
-    configure_encoder(5, PARAM_C_VAL, trigger_level_12bit);
+    configure_encoder(5, PARAM_C_VAL, trigger_level_12bit);*/
 }
+
 
 uint8_t oldMenu = 0xFF; // Valore iniziale invalido per forzare l'aggiornamento al primo ciclo
 void updateSidebarLabels() {
     if(currentMenu != oldMenu) {
         set_trig_enc_default();
+        cursor_type = CUR_OFF; // Spegniamo i cursori quando cambiamo menu per evitare confusione
+
+        setup_encoder(0, OFFSET_Y1_C_VAL, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP);
+        setup_encoder(2, OFFSET_Y2_C_VAL, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP);
+
+
         oldMenu = currentMenu;
     }
     // --- 1. AGGIORNAMENTO NOME MENU NELLA BARRA SUPERIORE ---
@@ -893,10 +1069,10 @@ void updateSidebarLabels() {
             menuColor = WHITE;
             break;
         
-        /*case MENU_PAN:
-            menuTitle = " PAN  ";
-            menuColor = MAGENTA;
-            break;*/
+        case MENU_CURSORS:
+            menuTitle = "CURSORS";
+            menuColor = GREENYELLOW;
+            break;
             
         default:
             menuTitle = " MENU ";
@@ -905,8 +1081,8 @@ void updateSidebarLabels() {
     }
     
     // Scriviamo il titolo del menu centrato sopra i tasti, con il colore specifico
-    tft_fillRect(410, 0, 480, 20, DARKGREY);
-    tft_printCenteredX(menuTitle, 410, 475, 5, menuColor, DARKGREY, 2); // Opzione centrata
+    tft_fillRect(410, 0, 479, 20, BLACK);
+    tft_printCenteredX(menuTitle, 410, 475, 5, menuColor, BLACK, 2); // Opzione centrata
 
     // --- 2. LOGICA TASTI SIDEBAR ---
 
@@ -974,7 +1150,31 @@ void updateSidebarLabels() {
         drawMenuButton(4, "", "", true, WHITE);
         
     }
+    else if (currentMenu == MENU_CURSORS) {
+        // TASTO 0: Tipo di Cursore (OFF, VOLT, TIME)
+        const char* typeLabels[] = {"OFF", "VOLT", "TIME"};
+        drawMenuButton(0, "Type", typeLabels[cursor_type], (cursor_type > 0), WHITE);
+        drawMenuButton(1, "Source", (cursor_source == 1) ? "CH1" : "CH2", true, WHITE);
+        // TASTO 1: Sorgente (CH1 / CH2)
+        if(cursor_type == CUR_OFF){
+            
+            drawMenuButton(2, "", "", true, WHITE);
+            drawMenuButton(3, "", "", true, WHITE);
+            drawMenuButton(4, "", "", true, WHITE);
+        }else if(cursor_type == CUR_VOLT){
 
+            drawMenuButton(2, "dV", "", false, WHITE);
+            drawMenuButton(3, "Cursor 1", "", false, WHITE);
+            drawMenuButton(4, "Cursor 2", "", false, WHITE);
+        }else if (cursor_type == CUR_TIME){
+
+            drawMenuButton(2, "dT dF", "", false, WHITE);
+            drawMenuButton(3, "Cursor 1", "", false, WHITE);
+            drawMenuButton(4, "", "", false, WHITE);
+        }
+        
+    }
+    tft_drawFastHLine(415, TRACE_H + MARGIN_Y + 2, 58, WHITE);
 }
 
 void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
@@ -1045,54 +1245,6 @@ void toggleInvert(Channel *ch)
     // Disegniamo il pulsante (Tasto 3 nel menu)
     drawMenuButton(4, "Invert", label, ch->inverted, WHITE); 
 
-}
-
-
-
-#define FREQ_AVG_SAMPLES 32
-
-float read_fpga_frequency2() {
-    static float history[FREQ_AVG_SAMPLES];
-    static uint8_t idx = 0;
-    static float sum = 0;
-    static uint8_t count = 0;
-    static float last_stable_freq = 0;
-
-    // Calcola la frequenza SOLO se siamo in RUN e non stiamo facendo Pan
-    if (is_running && !pan_flag && !freeze) {
-        uint8_t v0 = REG_FREQ0;
-        uint8_t v1 = REG_FREQ1;
-        uint8_t v2 = REG_FREQ2;
-        uint8_t v3 = REG_FREQ3;
-
-        uint32_t period = ((uint32_t)v3 << 24) | 
-                          ((uint32_t)v2 << 16) | 
-                          ((uint32_t)v1 << 8)  | 
-                           (uint32_t)v0;
-
-        if (period == 0) {
-            last_stable_freq = 0;
-            return 0;
-        }
-
-        // Calcolo frequenza istantanea
-        float instant_freq = 3840000000.0f / (float)period;
-
-        // Aggiornamento Media Mobile
-        sum -= history[idx];
-        history[idx] = instant_freq;
-        sum += history[idx];
-        
-        idx = (idx + 1) % FREQ_AVG_SAMPLES;
-        if (count < FREQ_AVG_SAMPLES) count++;
-
-        last_stable_freq = sum / count;
-        return last_stable_freq;
-    } 
-    
-    // In STOP (freeze) o durante il Pan, restituiamo l'ultimo valore calcolato
-    // senza leggere i registri, così la cifra sul display resta ferma.
-    return last_stable_freq;
 }
 
 float read_fpga_frequency() {
@@ -1392,20 +1544,20 @@ else {
     if(old_freq != freq || old_f_active == 0) {
         tft_set_cursor(MARGIN_X + 230, yPos + 20); 
         setTextColor(WHITE, BLACK);
-        tft_fillRect(MARGIN_X + 230, yPos + 20, 100, 16, BLACK);
+        tft_fillRect(MARGIN_X + 230, yPos + 20, 120, 16, BLACK);
         // Pulizia locale prima di scrivere il nuovo valore (opzionale se tft_Print sovrascrive bene)
         // tft_fillRect(MARGIN_X + 230, yPos + 20, 80, 10, BLACK); 
 
         tft_Print("F:");
         if (freq > 1000000) {
             tft_print_float(freq / 1000000.0, 2);
-            tft_Print("MHz");
+            tft_Print(" MHz");
         } else if (freq > 1000) {
             tft_print_float(freq / 1000.0, 1);
-            tft_Print("kHz");
+            tft_Print(" kHz");
         } else {
             tft_print_float(freq, 1);
-            tft_Print("Hz "); // Spazio finale per pulire eventuali residui di cifre precedenti
+            tft_Print(" Hz "); // Spazio finale per pulire eventuali residui di cifre precedenti
         }
         
         old_freq = freq;
@@ -1424,49 +1576,59 @@ else {
 }
 }
 
+
+                                                                           
+
 void write_encoder(uint8_t encoder_idx, int16_t value) {
     switch (encoder_idx) {
         case 0: // Encoder 0 controlla la posizione verticale di CH1
-            configure_encoder(0, PARAM_MIN, OFFSET_Y_MIN);
+            /*configure_encoder(0, PARAM_MIN, OFFSET_Y_MIN);
             configure_encoder(0, PARAM_MAX, OFFSET_Y_MAX);
             configure_encoder(0, PARAM_STEP, OFFSET_Y_STEP);
-            configure_encoder(0, PARAM_C_VAL, value);
+            configure_encoder(0, PARAM_C_VAL, value);*/
+            setup_encoder(0, value, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP);
             break;
         case 1: // Encoder 1 Volt/Div CH1
-            configure_encoder(1, PARAM_MIN, VDIVCH_MIN);
+            /*configure_encoder(1, PARAM_MIN, VDIVCH_MIN);
             configure_encoder(1, PARAM_MAX, VDIVCH_MAX);
             configure_encoder(1, PARAM_STEP, VDIVCH_STEP);
-            configure_encoder(1, PARAM_C_VAL, value);
+            configure_encoder(1, PARAM_C_VAL, value);*/
+            setup_encoder(1, value, VDIVCH_MIN, VDIVCH_MAX, VDIVCH_STEP);
             break;    
         case 2: // Encoder 2 controlla la posizione verticale di CH2
-            configure_encoder(2, PARAM_MIN, OFFSET_Y_MIN);
+            /*configure_encoder(2, PARAM_MIN, OFFSET_Y_MIN);
             configure_encoder(2, PARAM_MAX, OFFSET_Y_MAX);
             configure_encoder(2, PARAM_STEP, OFFSET_Y_STEP);
-            configure_encoder(2, PARAM_C_VAL, value);
+            configure_encoder(2, PARAM_C_VAL, value);*/
+            setup_encoder(2, value, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP); 
             break;
         case 3: // Encoder 1 Volt/Div CH1
-            configure_encoder(3, PARAM_MIN, VDIVCH_MIN);
+            /*configure_encoder(3, PARAM_MIN, VDIVCH_MIN);
             configure_encoder(3, PARAM_MAX, VDIVCH_MAX);
             configure_encoder(3, PARAM_STEP, VDIVCH_STEP);
-            configure_encoder(3, PARAM_C_VAL, value);
+            configure_encoder(3, PARAM_C_VAL, value);*/
+            setup_encoder(3, value, VDIVCH_MIN, VDIVCH_MAX, VDIVCH_STEP);
             break;        
         case 4: // Encoder 4 controlla la base dei tempi
-            configure_encoder(4, PARAM_MIN, TDIV_MIN);
+            /*configure_encoder(4, PARAM_MIN, TDIV_MIN);
             configure_encoder(4, PARAM_MAX, TDIV_MAX);
             configure_encoder(4, PARAM_STEP, TDIV_STEP);
-            configure_encoder(4, PARAM_C_VAL, value);
+            configure_encoder(4, PARAM_C_VAL, value);*/
+            setup_encoder(4, value, TDIV_MIN, TDIV_MAX, TDIV_STEP);
             break;
         case 5: // Encoder 5 controlla il livello di trigger
-            configure_encoder(5, PARAM_MIN, TRIG_MIN);
+            /*configure_encoder(5, PARAM_MIN, TRIG_MIN);
             configure_encoder(5, PARAM_MAX, TRIG_MAX);
             configure_encoder(5, PARAM_STEP, TRIG_STEP);
-            configure_encoder(5, PARAM_C_VAL, value);
+            configure_encoder(5, PARAM_C_VAL, value);*/
+            setup_encoder(5, value, TRIG_MIN, TRIG_MAX, TRIG_STEP);
             break;
         case 6: // Encoder 6 controlla il Pan
-            configure_encoder(6, PARAM_MIN, -PAN_LIMIT);
+            /*configure_encoder(6, PARAM_MIN, -PAN_LIMIT);
             configure_encoder(6, PARAM_MAX, PAN_LIMIT);
             configure_encoder(6, PARAM_STEP, PAN_STEP);
-            configure_encoder(6, PARAM_C_VAL, value);
+            configure_encoder(6, PARAM_C_VAL, value);*/
+            setup_encoder(6, value, -PAN_LIMIT, PAN_LIMIT, PAN_STEP);
             break;
         default:
             
@@ -1642,8 +1804,6 @@ void init_timer_polling() {
     // Bit CS02=1, CS01=1, CS00=0 (secondo datasheet ATmega128)
     TCCR0 = (1 << CS02) | (1 << CS01);
 }
-
-
 
 uint8_t cerca_indice_timebase(float periodo) {
     // Se vogliamo vedere 4 cicli su 10 divisioni:
@@ -1963,6 +2123,11 @@ void routine_autoset_dual() {
 
 }
 /*********************AUTOSET END *****************/
+
+
+
+
+
 // --- main loop ---
 void scope_main(void)
 {
@@ -2009,10 +2174,20 @@ void scope_main(void)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
                 case 2: // Tasto AUTOSET
+                    currentMenu = MENU_NONE; // Esci da eventuali menu per avere un'interfaccia pulita durante l'autoset
+                    cursor_type = CUR_OFF; // Disattiva eventuali cursori attivi
                      routine_autoset_dual();
                      updateSidebarLabels(); // Aggiorna le label dopo l'autoset
                     
                     break;
+                case KEY_CURSORS: // Tasto fisico "Cursors"
+                    if(currentMenu != MENU_CURSORS) {
+                        currentMenu = MENU_CURSORS;
+                        updateSidebarLabels(); 
+                    } 
+
+                        
+                    break;  
                 case KEY_RUN:
                     if(trigger_mode == TRIG_MODE_SINGLE)
                         is_running = true;
@@ -2073,7 +2248,7 @@ void scope_main(void)
                     }
                     break;
                 case 18: // Tasto encoder per il PAN
-                    write_encoder(6, 0); // Reset livello di trigger
+                    write_encoder(6, 0); 
                     break;
             }
             switch (currentMenu){
@@ -2196,6 +2371,43 @@ void scope_main(void)
                             break;
                     }
                     break;
+                case MENU_CURSORS:
+                    switch (ev) {
+                        case 12: 
+                            cursor_type++;
+                            if (cursor_type > CUR_TIME) {
+                                cursor_type = CUR_OFF;
+                            }
+                            if (cursor_type == CUR_VOLT) {
+                                // Configura Encoder 1 per Cursore A (Verticale: 0-240)
+                                setup_encoder(0, cursor_v_a, MARGIN_Y, MARGIN_Y + 239, 1); 
+                                // Configura Encoder 2 per Cursore B (Verticale: 0-240)
+                                setup_encoder(2, cursor_v_b, MARGIN_Y, MARGIN_Y + 239, 1);
+                            } else {
+                                // Configura per Cursore Tempo (Orizzontale: 0-400)
+                                setup_encoder(0, cursor_h_a, MARGIN_X, MARGIN_X + 400, 1);
+                                setup_encoder(2, cursor_h_b, MARGIN_X, MARGIN_X + 400, 1);
+                            }
+                            updateSidebarLabels(); 
+
+                            break;
+
+                        case 9:  // Tasto 2 
+                            // Se in modalità cursori, questo potrebbe spostare il cursore verticale sinistro
+                            break;
+                        case 6:  // Tasto 3 
+                            // Se in modalità cursori, questo potrebbe spostare il cursore verticale destro
+                            break;
+                        case 3:  // Tasto 4 
+                            // Se in modalità cursori, questo potrebbe spostare il cursore orizzontale superiore
+                            break;
+
+                        case 0:  // Tasto 5 
+                            // Se in modalità cursori, questo potrebbe spostare il cursore orizzontale inferiore
+                            break;
+                    }
+                    break;
+                
             }
 
            
@@ -2249,13 +2461,23 @@ if (new_val != prev_enc_trig_val) {
         prev_view_offset = new_pan;
         view_offset = new_pan; // aggiorna il valore corrente
         pan_flag = true;
-        /*uart_print("offset ");
-        uart_print_int16(view_offset);
-        uart_print("\r\n");*/
     }
 
-    ch1.offset = encoder_values[0]; // Aggiorna posizione Y CH1
-    ch2.offset = encoder_values[2]; //
+
+
+    if (currentMenu == MENU_CURSORS) {
+        if (cursor_type == CUR_VOLT) {
+            cursor_v_a = encoder_values[0]; // Aggiorna posizione cursore verticale A
+            cursor_v_b = encoder_values[2]; // Aggiorna posizione cursore verticale B
+        } else if (cursor_type == CUR_TIME) {
+            cursor_h_a = encoder_values[0]; // Aggiorna posizione cursore orizzontale A
+            cursor_h_b = encoder_values[2]; // Aggiorna posizione cursore orizzontale B
+        }
+    } else {
+        // Logica normale: Encoder 1 -> CH1 Offset, Encoder 2 -> CH2 Offset
+        ch1.offset = encoder_values[0];
+        ch2.offset = encoder_values[2];
+    }
 
 
     // Aggiorna Canale 1 (usa encoder_values[1])

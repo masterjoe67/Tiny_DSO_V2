@@ -74,6 +74,7 @@
 #define MENU_TRIG       3
 #define MENU_MEAS       4
 #define MENU_PAN        5
+#define MENU_CURSORS    6
 
 #define COUPL_DC  0
 #define COUPL_AC  1
@@ -91,6 +92,7 @@
 #define KEY_RUN        0x08
 #define KEY_CNTX1      0x0C
 #define KEY_CNTX2      0x09
+#define KEY_CURSORS    0x05
 #define KEY_CNTX3      0x06
 #define KEY_CNTX4      0x03
 #define KEY_CNTX5      0x00
@@ -156,6 +158,8 @@
 #define T_DIV_500US 10
 #define T_BASE_1MS 11
 #define T_BASE_10MS 12
+
+#define FREQ_AVG_SAMPLES 32
 
 extern uint16_t _width;
 extern uint16_t _height;
@@ -244,6 +248,8 @@ typedef enum {
     ENC_MODE_HYSTERESIS
 } EncoderMode;
 
+typedef enum { CUR_OFF = 0, CUR_VOLT, CUR_TIME } CursorType;
+
 
 void updateSidebarLabels(void);
 void conf_encoder(void);
@@ -256,6 +262,7 @@ void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,
                       trig_channel_t chan, uint8_t edge_rising);
 
 uint16_t calcola_step_trigger(float volts_div_val);
+void drawTextButton(uint8_t index, const char* data1, const char* data2, uint16_t color);
 
 void scope_main(void);
 

@@ -71,5 +71,6 @@ uint8_t keypad_poll(uint8_t *key, uint8_t *repeat);
 void configure_encoder(uint8_t id, uint8_t param, int16_t value) ;
 int16_t read_encoder(uint8_t id);
 void update_all_encoders(void);
+void setup_encoder(uint8_t id, int16_t value, int16_t min, int16_t max, int16_t step);
 
 #endif
