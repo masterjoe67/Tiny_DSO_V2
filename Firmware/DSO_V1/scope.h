@@ -263,7 +263,10 @@ void osc_init_trigger(uint16_t trig_level, trigger_mode_t mode,
 
 uint16_t calcola_step_trigger(float volts_div_val);
 void drawTextButton(uint8_t index, const char* data1, const char* data2, uint16_t color);
+void draw_trigger_line(uint16_t level12, uint16_t color, bool erase);
+float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit);
 
+int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_16bit, bool isTrigger);
 void scope_main(void);
 
 

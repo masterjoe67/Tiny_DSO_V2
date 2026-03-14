@@ -119,6 +119,9 @@ uint8_t cursor_select = 0; // 0 = A, 1 = B, 2 = Entrambi
 int16_t cursor_v_a = 50, cursor_v_b = 150; // Per Tensione
 int16_t cursor_h_a = 100, cursor_h_b = 300; // Per Tempo
 
+static char str_ta[20];
+static char str_tb[20];
+
 
 const char* time_base_labels[] = {
     "250ns", "500ns", "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
@@ -177,14 +180,15 @@ const float timebase_seconds[] = {
     1.00000000f  // 20: 1s
 };
 
-
-//Prototipe
-void draw_trigger_line(uint16_t level12, uint16_t color, bool erase);
-float calcolaVoltReali(Channel *ch, uint8_t valoreADC_8bit);
-
-int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_16bit, bool isTrigger); 
-
-
+// Accoda una stringa a un'altra e restituisce il puntatore alla fine
+// Molto utile per concatenare più pezzi in sequenza
+char* append_str(char* dest, const char* src) {
+    while (*src) {
+        *dest++ = *src++;
+    }
+    *dest = '\0'; // Chiude sempre la stringa
+    return dest;  // Ritorna la nuova posizione del cursore
+}
 
 // Da chiamare SOLO quando l'utente cambia V/div o Offset
 void aggiorna_parametri_hw(Channel *ch) {
@@ -635,13 +639,6 @@ void draw_ground_marker(Channel *ch) {
 
 
 
-// Assicurati che queste siano FUORI dalla funzione (Globali/Statiche)
-static uint8_t old_cursor_type = CUR_OFF;
-static int16_t old_v_a = -1, old_v_b = -1;
-static int16_t old_h_a = -1, old_h_b = -1;
-static char str_ta[20];
-static char str_tb[20];
-
 
 void calcola_e_stampa_dati_cursori() {
     if (cursor_type == CUR_OFF) return;
@@ -671,17 +668,32 @@ void calcola_e_stampa_dati_cursori() {
 
             // V(A)
             dtostrf(va, 1, 2, val_str);
-            sprintf(buf, "%c%sV", (va >= 0 ? '+' : ' '), val_str); // Spazio se negativo per allineamento
+            //sprintf(buf, "%c%sV", (va >= 0 ? '+' : ' '), val_str); // Spazio se negativo per allineamento
+            char* p = buf;
+            *p++ = (va >= 0 ? '+' : ' '); // Aggiunge il segno o lo spazio
+            p = append_str(p, val_str);    // Incolla il numero convertito da dtostrf
+            p = append_str(p, " V");       // Aggiunge spazio e unità (Maiuscola!)
             drawTextButton(3, buf, "", WHITE);
 
             // V(B)
             dtostrf(vb, 1, 2, val_str);
-            sprintf(buf, "%c%sV", (vb >= 0 ? '+' : ' '), val_str);
+            //sprintf(buf, "%c%sV", (vb >= 0 ? '+' : ' '), val_str);
+            p = buf;                      // Puntatore all'inizio del buffer
+            *p++ = (vb >= 0 ? '+' : ' ');       // Scrive il segno o lo spazio e sposta il puntatore
+            p = append_str(p, val_str);         // Copia il numero (restituisce la posizione della fine)
+            *p++ = ' ';                         // (Opzionale) Spazio prima della V per leggibilità
+            *p++ = 'V';                         // Scrive la V
+            *p = '\0';                          // Chiude la stringa (fondamentale!)
             drawTextButton(4, buf, "", WHITE);
 
             // Delta V
             dtostrf(dv, 1, 2, val_str);
-            sprintf(buf, "%c%sV", (dv >= 0 ? '+' : ' '), val_str);
+            //sprintf(buf, "%c%sV", (dv >= 0 ? '+' : ' '), val_str);
+            p = buf;
+            *p++ = (dv >= 0 ? '+' : ' ');
+            p = append_str(p, val_str);
+            *p++ = 'V';
+            *p = '\0';
             drawTextButton(2, buf, "", WHITE);
 
             // Aggiorna memoria
@@ -705,13 +717,26 @@ void calcola_e_stampa_dati_cursori() {
                 char n_buf[12];
                 if (abs_t < 0.000001f) {
                     dtostrf(abs_t * 1e9, 1, 0, n_buf);
-                    sprintf(targets[i], "%c%s ns", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                    //sprintf(targets[i], "%c%s ns", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                    char* p = targets[i];            // Puntiamo all'inizio della stringa di destinazione
+                    *p++ = (tempi[i] < 0 ? '-' : '+'); // Scrive il segno e sposta il puntatore
+                    p = append_str(p, n_buf);        // Incolla il valore numerico (es. "250")
+                    p = append_str(p, " ns");        // Aggiunge spazio e unità (Maiuscolo per il font!)
+                    // La funzione append_str chiude già con '\0', quindi siamo a posto.
                 } else if (abs_t < 0.001f) {
                     dtostrf(abs_t * 1e6, 1, 2, n_buf);
-                    sprintf(targets[i], "%c%s us", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                    //sprintf(targets[i], "%c%s us", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                    char* p = targets[i];
+                    *p++ = (tempi[i] < 0 ? '-' : '+');
+                    p = append_str(p, n_buf);
+                    p = append_str(p, " us");   
                 } else {
                     dtostrf(abs_t * 1e3, 1, 2, n_buf);
-                    sprintf(targets[i], "%c%s ms", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                    //sprintf(targets[i], "%c%s ms", (tempi[i] < 0 ? '-' : '+'), n_buf);
+                    char* p = targets[i];
+                    *p++ = (tempi[i] < 0 ? '-' : '+');
+                    p = append_str(p, n_buf);
+                    p = append_str(p, " ms");
                 }
             }
             drawTextButton(3, str_ta, "", WHITE);
@@ -721,13 +746,22 @@ void calcola_e_stampa_dati_cursori() {
             char dt_buf[24], n_buf[12];
             if (abs_dt < 0.000001f) {
                 dtostrf(abs_dt * 1e9, 1, 0, n_buf);
-                sprintf(dt_buf, "%s ns", n_buf);
+                //sprintf(dt_buf, "%s ns", n_buf);
+                char* p = dt_buf;      // Punta all'inizio del buffer di destinazione
+                p = append_str(p, n_buf); // Incolla il numero e sposta il puntatore alla fine
+                append_str(p, " ns");     // Aggiunge lo spazio, l'unità e chiude la stringa
             } else if (abs_dt < 0.001f) {
                 dtostrf(abs_dt * 1e6, 1, 2, n_buf);
-                sprintf(dt_buf, "%s us", n_buf);
+                //sprintf(dt_buf, "%s us", n_buf);
+                char* p = dt_buf;
+                p = append_str(p, n_buf);
+                p = append_str(p, " us");
             } else {
                 dtostrf(abs_dt * 1e3, 1, 2, n_buf);
-                sprintf(dt_buf, "%s ms", n_buf);
+                //sprintf(dt_buf, "%s ms", n_buf);
+                char* p = dt_buf;
+                p = append_str(p, n_buf);
+                p = append_str(p, " ms");
             }
 
             // Frequenza
@@ -736,16 +770,27 @@ void calcola_e_stampa_dati_cursori() {
                 float freq = 1.0f / abs_dt;
                 if (freq >= 1000000.0f) {
                     dtostrf(freq / 1e6, 1, 1, f_num);
-                    sprintf(f_buf, "%s MHz", f_num);
+                    //sprintf(f_buf, "%s MHz", f_num);
+                    char* p = f_buf;          // Punta all'inizio del buffer della frequenza
+                    p = append_str(p, f_num); // Incolla il numero (es. "1.25")
+                    append_str(p, " MHz");    // Aggiunge lo spazio e l'unità in minuscolo
                 } else if (freq >= 1000.0f) {
                     dtostrf(freq / 1e3, 1, 1, f_num);
-                    sprintf(f_buf, "%s KHz", f_num);
+                    //sprintf(f_buf, "%s KHz", f_num);
+                    char* p = f_buf;
+                    p = append_str(p, f_num);
+                    p = append_str(p, " KHz");
                 } else {
                     dtostrf(freq, 1, 1, f_num);
-                    sprintf(f_buf, "%s Hz", f_num);
+                    //sprintf(f_buf, "%s Hz", f_num);
+                    char* p = f_buf;
+                    p = append_str(p, f_num);
+                    p = append_str(p, " Hz");
                 }
             } else {
-                sprintf(f_buf, "--- Hz");
+                //sprintf(f_buf, "--- Hz");
+                char* p = f_buf;
+                p = append_str(p, "--- Hz");
             }
             
             drawTextButton(2, dt_buf, f_buf, WHITE);
@@ -763,16 +808,13 @@ void calcola_e_stampa_dati_cursori() {
     last_tdiv = timebase_seconds[current_time_base_idx];
 }
 
+
 void aggiorna_grafica_cursori() {
-    // Variabili statiche per mantenere la memoria tra un ciclo e l'altro
     static uint8_t old_type = CUR_OFF;
     static int16_t ov_a = -1, ov_b = -1, oh_a = -1, oh_b = -1;
 
-    // --- 1. CONTROLLO UNIVOCO PER LA CANCELLAZIONE ---
-    // Questo blocco viene eseguito SOLO quando cambiamo modalità (es. da VOLT a OFF)
+    // --- 1. GESTIONE CAMBIO MODALITÀ (Cancellazione totale precedente) ---
     if (cursor_type != old_type) {
-        
-        // Se il modo precedente era attivo, cancelliamo tutto prima di cambiare
         if (old_type == CUR_VOLT) {
             if (ov_a != -1) disegna_linea_cursore_v(ov_a, BLACK);
             if (ov_b != -1) disegna_linea_cursore_v(ov_b, BLACK);
@@ -781,52 +823,46 @@ void aggiorna_grafica_cursori() {
             if (oh_a != -1) disegna_linea_cursore_h(oh_a, BLACK);
             if (oh_b != -1) disegna_linea_cursore_h(oh_b, BLACK);
         }
-
-        // Aggiorniamo il vecchio tipo con quello attuale
         old_type = cursor_type;
-
-        // Reset delle posizioni memorizzate
-        ov_a = -1; ov_b = -1;
-        oh_a = -1; oh_b = -1;
-
-        // Se siamo passati a OFF, abbiamo finito la cancellazione e usciamo
+        ov_a = -1; ov_b = -1; oh_a = -1; oh_b = -1;
         if (cursor_type == CUR_OFF) return;
     }
 
-    // --- 2. FILTRO DI ESECUZIONE ---
-    // Se i cursori sono spenti (e abbiamo già gestito la cancellazione sopra),
-    // non eseguiamo nient'altro per risparmiare cicli CPU (importante a 60MHz).
     if (cursor_type == CUR_OFF) return;
 
-    // --- 3. LOGICA DI DISEGNO DINAMICO (Solo se cursor_type != OFF) ---
+    // --- 2. LOGICA DI DISEGNO/AGGIORNAMENTO ---
     if (cursor_type == CUR_VOLT) {
         // Cursore A
         if (cursor_v_a != ov_a) {
-            if (ov_a != -1) disegna_linea_cursore_v(ov_a, BLACK);
-            disegna_linea_cursore_v(cursor_v_a, WHITE);
+            if (ov_a != -1) disegna_linea_cursore_v(ov_a, BLACK); // Cancella solo se spostato
             ov_a = cursor_v_a;
         }
+        disegna_linea_cursore_v(ov_a, WHITE); // Disegna SEMPRE nella posizione attuale
+
         // Cursore B
         if (cursor_v_b != ov_b) {
             if (ov_b != -1) disegna_linea_cursore_v(ov_b, BLACK);
-            disegna_linea_cursore_v(cursor_v_b, WHITE);
             ov_b = cursor_v_b;
         }
+        disegna_linea_cursore_v(ov_b, WHITE);
     } 
     else if (cursor_type == CUR_TIME) {
         // Cursore A
         if (cursor_h_a != oh_a) {
             if (oh_a != -1) disegna_linea_cursore_h(oh_a, BLACK);
-            disegna_linea_cursore_h(cursor_h_a, WHITE);
             oh_a = cursor_h_a;
         }
+        disegna_linea_cursore_h(oh_a, WHITE);
+
         // Cursore B
         if (cursor_h_b != oh_b) {
             if (oh_b != -1) disegna_linea_cursore_h(oh_b, BLACK);
-            disegna_linea_cursore_h(cursor_h_b, WHITE);
             oh_b = cursor_h_b;
         }
+        disegna_linea_cursore_h(oh_b, WHITE);
     }
+
+    // Aggiorna i testi (che hanno già la loro logica interna di risparmio CPU)
     calcola_e_stampa_dati_cursori();
 }
 
@@ -855,13 +891,13 @@ void acquire_and_draw(){
 }
 
 void drawTextButton(uint8_t index, const char* data1, const char* data2, uint16_t color) {
-    uint16_t y = 25 + (index * 50); // Calcola posizione Y in base all'indice
+    uint16_t y = 25 + (index * 49); // Calcola posizione Y in base all'indice
     uint16_t bgColor = BLACK;       // Definiamo lo sfondo fisso a nero
     
-    tft_fillRect(410, y + 12, 68, 38, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
+    tft_fillRect(410, y + 12, 68, 34, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
     // 1. Disegna la cornice del bottone
     //tft_drawRect(410, y, 65, 40, color);
-    //tft_drawFastHLine(415, y, 58, color); // Linea di divisione orizzontale
+    tft_drawFastHLine(415, y, 58, color); // Linea di divisione orizzontale
 
     // 3. Scrivi il testo passando tutti i parametri richiesti dalla tua funzione
     tft_printCenteredX(data1, 410, 479, y + 15, color, bgColor, 2); 
@@ -869,7 +905,7 @@ void drawTextButton(uint8_t index, const char* data1, const char* data2, uint16_
 }
 
 void drawMenuButton(uint8_t index, const char* label, const char* data, bool active, uint16_t color) {
-    uint16_t y = 25 + (index * 50); // Calcola posizione Y in base all'indice
+    uint16_t y = 25 + (index * 49); // Calcola posizione Y in base all'indice
     uint16_t bgColor = BLACK;       // Definiamo lo sfondo fisso a nero
     
     tft_fillRect(410, y, 68, 48, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
@@ -913,7 +949,6 @@ void drawStaticInterface() {
     // 6. Ripristina la griglia
     tft_drawGrid(LIGHTGREY);
 }
-
 
 void cycleCoupling(Channel *ch) 
 {
@@ -1081,7 +1116,8 @@ void updateSidebarLabels() {
     }
     
     // Scriviamo il titolo del menu centrato sopra i tasti, con il colore specifico
-    tft_fillRect(410, 0, 479, 20, BLACK);
+    tft_fillRect(410, 0, 79, 20, BLACK);
+    //tft_fillRect(411, 20, 68, 48, BLACK); // Pulisce l'area dei tasti per evitare residui di menu precedenti
     tft_printCenteredX(menuTitle, 410, 475, 5, menuColor, BLACK, 2); // Opzione centrata
 
     // --- 2. LOGICA TASTI SIDEBAR ---
@@ -1127,7 +1163,8 @@ void updateSidebarLabels() {
     // TASTO 3: Funzione Encoder (Level / Hysteresis)
     // Se l'encoder è in modalità Hysteresis, evidenziamo il tasto o cambiamo testo
     char hyst_str[8];
-    sprintf(hyst_str, "%u", (unsigned int)trigger_hysteresis);
+    //sprintf(hyst_str, "%u", (unsigned int)trigger_hysteresis);
+    utoa((unsigned int)trigger_hysteresis, hyst_str, 10);
     if (current_enc_mode == ENC_MODE_HYSTERESIS) {
         
         drawMenuButton(3, "Hyst:", hyst_str, true, YELLOW); // Cambia colore per attirare l'attenzione
@@ -1170,11 +1207,12 @@ void updateSidebarLabels() {
 
             drawMenuButton(2, "dT dF", "", false, WHITE);
             drawMenuButton(3, "Cursor 1", "", false, WHITE);
-            drawMenuButton(4, "", "", false, WHITE);
+            drawMenuButton(4, "Cursor 2", "", false, WHITE);
         }
         
     }
     tft_drawFastHLine(415, TRACE_H + MARGIN_Y + 2, 58, WHITE);
+    tft_drawFastHLine(415, TRACE_H + MARGIN_Y + TRACE_H + 2, 58, WHITE);
 }
 
 void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
@@ -2138,7 +2176,7 @@ void scope_main(void)
     init_channels();
     conf_encoder();
     drawStaticInterface();
-    update_status_bar(true);
+    //update_status_bar(true);
     set_base_time(19);
 
     set_trigger_level(trigger_level_12bit);   
@@ -2393,17 +2431,19 @@ void scope_main(void)
                             break;
 
                         case 9:  // Tasto 2 
-                            // Se in modalità cursori, questo potrebbe spostare il cursore verticale sinistro
+                            cursor_source++;
+                            if (cursor_source > 2) cursor_source = 1;
+                            updateSidebarLabels();
                             break;
                         case 6:  // Tasto 3 
-                            // Se in modalità cursori, questo potrebbe spostare il cursore verticale destro
+                            
                             break;
                         case 3:  // Tasto 4 
-                            // Se in modalità cursori, questo potrebbe spostare il cursore orizzontale superiore
+                            
                             break;
 
                         case 0:  // Tasto 5 
-                            // Se in modalità cursori, questo potrebbe spostare il cursore orizzontale inferiore
+                            
                             break;
                     }
                     break;
@@ -2429,7 +2469,6 @@ void scope_main(void)
         REG_TRIG = 0x01;    // Armiamo la FSM FPGA
         updateSidebarLabels(); 
     }
-
    
     int16_t new_val = encoder_values[5];
 
