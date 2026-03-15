@@ -7,85 +7,85 @@
 #include "Peripheral/input.h"
 #include "Peripheral/uart.h"
 #include "scope.h"
+#include "scope_shared.h"
+#include "display_manager.h"
+#include "fpga_manager.h"
+#include "autoset_manager.h"
+#include "encoder_manager.h"
+#include "trace_manager.h"
+#include "trigger_manager.h"
+#include "cursor_manager.h"
 
 
 
-
-
-
-//int16_t old_buffer_a[400];
-//int16_t old_buffer_b[400];
-
-// Definiamo l'inizio della RAM "extra" (dopo i primi 4KB dell'ATmega128)
-// L'indirizzo 0x1100 è l'inizio della zona oltre i 4KB standard
-#define RAM_EXTRA_START 0x1100
-#define ADDR_OLD_A (int16_t*)(0x1740)
-#define ADDR_OLD_B (int16_t*)(0x1A60)
-
-// Creiamo dei puntatori che puntano a quella zona
-uint16_t *ch1_buffer = (uint16_t *)(RAM_EXTRA_START);
-uint16_t *ch2_buffer = (uint16_t *)(RAM_EXTRA_START + 800); // 800 byte dopo (400 samples * 2)
-
-// Puntatori ai buffer "storici" (vecchi dati per cancellazione)
-int16_t *old_buffer_a = (int16_t *)(RAM_EXTRA_START + 1600);
-int16_t *old_buffer_b = (int16_t *)(RAM_EXTRA_START + 2400);
-
-// Mappiamo la struct dopo i buffer dei campioni (es. a 0x3000)
+/* --- MAPPATURA HARDWARE & MEMORIA CONDIVISA --- */
+// Puntatore alla struct delle misure (mappata dopo i buffer campioni)
 ScopeMeasures *misure = (ScopeMeasures *)0x3000;
 
+// Puntatori ai buffer per la cancellazione della traccia precedente (Double Buffering logico)
+int16_t* buffers_vecchi[2] = { ADDR_OLD_A, ADDR_OLD_B };
+
+/* --- STATO DEI CANALI --- */
 Channel ch1, ch2;
 
-uint8_t time_div_sel = 10;
-uint8_t prev_time_div_sel = 0xFF; // valore precedente (inesistente all'inizio)
-uint16_t prev_trigger_level = 0xFFFF; // valore precedente (inesistente all'inizio)
-int16_t prev_enc_trig_val = 0xFFFF;
-int16_t view_offset = 0;
+/* --- SISTEMA DI CONTROLLO & MENU --- */
+uint8_t currentMenu = MENU_CH1;         // Menu attualmente attivo
+uint8_t oldMenu = 0xFF;                 // Memoria per forzare il refresh del menu al boot
+bool is_running = true;                 // Stato acquisizione (Run/Stop)
+bool freeze = false;                    // Stato congelamento schermo
+bool pan_flag = false;                  // Flag per spostamento orizzontale della traccia
+
+/* --- CONFIGURAZIONE TEMPI (TIMEBASE) --- */
+uint8_t current_time_base_idx = 0;      // Indice attuale della base tempi
+uint8_t old_current_time_base_idx = 0xFF; // Memoria base tempi per refresh display
+uint8_t time_div_sel = 10;              // Selezione divisione temporale
+bool time_div_sel_changed = true;       // Flag per ricalcolo parametri temporali
+uint8_t prev_time_div_sel = 0xFF;       // Memoria per rilevamento cambio scala
+
+/* --- CONFIGURAZIONE TRIGGER --- */
+uint16_t trigger_level_12bit = 0x07FF;  // Livello trigger (Default a metà scala ADC 12-bit)
+uint16_t old_trigger_level_12bit = 0xFFFF; // Memoria per aggiornamento grafica trigger
+uint8_t  trigger_source = 1;            // Sorgente trigger (1 = CH1, 2 = CH2)
+uint8_t  trigger_hysteresis = 0x20;     // Isteresi antirumore (LSB)
+
+trigger_mode_t trigger_mode = TRIG_MODE_AUTO;   // Modalità: AUTO, NORMAL, SINGLE
+trig_slope_t   trigger_slope = TRIG_SLOPE_RISING; // Pendenza: SALITA, DISCESA
+
+/* --- MEMORIE DI STATO PER OTTIMIZZAZIONE GRAFICA --- */
+// Queste variabili evitano di riscrivere testi o pixel se i valori non cambiano
 int16_t prev_view_offset = 0xFFFF;
-int16_t prev_det_sig = 0;
-bool freeze = false;
-bool pan_flag = false;
-bool time_div_sel_changed = true;
-uint8_t trigger_hysteresis = 0x20; // Valore di default per l'isteresi (in LSB, da 0 a 255)
+uint16_t prev_trigger_level = 0xFFFF;
+int16_t prev_enc_trig_val = 0xFFFF;
+uint8_t old_meas_source = 1;
+uint8_t old_meas_type = 1;
+uint8_t old_meas_active = 2;
+uint8_t old_f_active = 0;
 
-static trigger_mode_t trigger_mode = TRIG_MODE_AUTO;
-static trig_slope_t trigger_slope = TRIG_SLOPE_RISING;
-static uint8_t trigger_source = 1;
-static uint8_t old_meas_source = 1;
-static uint8_t old_meas_type = 1;
-static uint8_t old_meas_active = 2;
-static uint8_t old_f_active = 0;
+/* --- INPUT & ENCODER --- */
+static int16_t last_enc1 = 0;           // Memoria posizione encoder 1
+static int16_t last_enc2 = 0;           // Memoria posizione encoder 2
 
-uint8_t currentMenu = MENU_CH1; // Default
+/* --- TABELLE DI LOOKUP (COSTANTI) --- */
 
-static Point_t old_trig_a, old_trig_b, old_trig_c;
-static int16_t last_trig_y = -100; // Inizializzato fuori schermo
-
-int16_t* buffers_vecchi[2] = { ADDR_OLD_A, ADDR_OLD_B };
-uint16_t trigger_level_12bit = 0x07FF;
-
-static int16_t last_enc1 = 0;
-static int16_t last_enc2 = 0;
-
-EncoderMode current_enc_mode = ENC_MODE_TRIGGER_LEVEL;
-
-
-uint8_t current_time_base_idx = 0;
-static bool is_running= true;
-
+// Valori reali delle divisioni verticali (V/div)
 const float v_div_values[] = {
     0.01, 0.02, 0.05,   // 10mV, 20mV, 50mV
     0.1,  0.2,  0.5,    // 100mV, 200mV, 500mV
     1.0,  2.0,  5.0,    10.0 // 1V, 2V, 5V, 10V
 };
 
-/*const char* v_div_labels[] = {
-    "10mV", "20mV", "50mV", 
-    "100mV", "200mV", "500mV", 
-    "1V", "2V", "5V","10V"
-};*/
+// Etichette testuali per la base tempi
+const char* time_base_labels[] = {
+    "250ns", "500ns", "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
+    "100us", "200us", "500us", "1ms",   "2ms",   "5ms", 
+    "10ms",  "20ms",  "50ms",  "100ms", "200ms", "500ms", 
+    "1s"
+};
 
-// Step dinamici per il trigger, mappati sulle  v_div_labels
-// Da 10mV (indice 0) a 10V (indice 9)
+/** * Step dinamici per il trigger.
+ * All'aumentare del Volts/div (chX.volts_div), la sensibilità del trigger 
+ * deve diminuire per non essere troppo "nervoso" su scale grandi.
+ */
 const uint16_t trigger_steps_table[10] = {
     1,   // 0: 10mV
     1,   // 1: 20mV
@@ -99,36 +99,6 @@ const uint16_t trigger_steps_table[10] = {
     640  // 9: 10V
 };
 
-uint8_t old_current_time_base_idx = 0xFF;
-uint16_t old_trigger_level_12bit = 0xFFFF;
-float old_freq = 0xFFFFFFFF;
-
-Point_t old_a = { 0, 0 };
-Point_t old_b = { 0, 0 };
-Point_t old_c = { 0, 0 };
-Point_t gnd_mark_a[2] = {{ 0, 0 }, { 0, 0 }};
-Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
-Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
-
-// Variabili di stato cursori
-CursorType cursor_type = CUR_OFF;
-uint8_t cursor_source = 1; // 1 = CH1, 2 = CH2
-uint8_t cursor_select = 0; // 0 = A, 1 = B, 2 = Entrambi
-
-// Posizioni in pixel (0-400 o 0-240 a seconda dell'asse)
-int16_t cursor_v_a = 50, cursor_v_b = 150; // Per Tensione
-int16_t cursor_h_a = 100, cursor_h_b = 300; // Per Tempo
-
-static char str_ta[20];
-static char str_tb[20];
-
-
-const char* time_base_labels[] = {
-    "250ns", "500ns", "1us",   "2us",   "5us",   "10us",  "20us",  "50us", 
-    "100us", "200us", "500us", "1ms",   "2ms",   "5ms", 
-    "10ms",  "20ms",  "50ms",  "100ms", "200ms", "500ms", 
-    "1s"
-};
 
 // Tabella valori DDS aggiornata (21 ingressi)
 // Indice 0: 250ns/div ... Indice 20: 1s/div
@@ -180,692 +150,11 @@ const float timebase_seconds[] = {
     1.00000000f  // 20: 1s
 };
 
-// Accoda una stringa a un'altra e restituisce il puntatore alla fine
-// Molto utile per concatenare più pezzi in sequenza
-char* append_str(char* dest, const char* src) {
-    while (*src) {
-        *dest++ = *src++;
-    }
-    *dest = '\0'; // Chiude sempre la stringa
-    return dest;  // Ritorna la nuova posizione del cursore
-}
-
-// Da chiamare SOLO quando l'utente cambia V/div o Offset
-void aggiorna_parametri_hw(Channel *ch) {
-    // 1. Calcolo della Scala (moltiplicata per 2^16 per matchare lo shift FPGA)
-    // Se volts_div è 1V/div, f_scale sarà circa 16000.
-    float f_scale = (3.3f / 4095.0f / ch->volts_div) * 30.0f * 65536.0f;
-    
-    if (ch->inverted) f_scale = -f_scale;
-
-    int16_t hw_scale = (int16_t)f_scale;
-    int16_t hw_offset = (int16_t)ch->offset; // Supporta da -50 a +250
-
-    if (ch == &ch1) {
-        // --- CANALE 1 ---
-        XRAM_WRITE(REG_CH1_SCALE_L,  hw_scale & 0xFF);
-        XRAM_WRITE(REG_CH1_SCALE_H,  hw_scale >> 8);
-        XRAM_WRITE(REG_CH1_OFFSET_L, hw_offset & 0xFF);
-        XRAM_WRITE(REG_CH1_OFFSET_H, hw_offset >> 8);
-    } 
-    else {
-        // --- CANALE 2 ---
-        XRAM_WRITE(REG_CH2_SCALE_L,  hw_scale & 0xFF);
-        XRAM_WRITE(REG_CH2_SCALE_H,  hw_scale >> 8);
-        XRAM_WRITE(REG_CH2_OFFSET_L, hw_offset & 0xFF);
-        XRAM_WRITE(REG_CH2_OFFSET_H, hw_offset >> 8);
-    }
-}
-
-void aggiorna_registri_dds(uint32_t reg_val) {
-    // Scrittura diretta byte per byte agli indirizzi mappati nell'FPGA
-    XRAM_WRITE(0x4020, (uint8_t)(reg_val & 0xFF));         // LSB
-    XRAM_WRITE(0x4021, (uint8_t)((reg_val >> 8) & 0xFF));
-    XRAM_WRITE(0x4022, (uint8_t)((reg_val >> 16) & 0xFF));
-    XRAM_WRITE(0x4023, (uint8_t)((reg_val >> 24) & 0xFF)); // MSB
-}
-
-void aggiorna_t_div(uint8_t indice) {
-   if (indice > 19) indice = 19;
-
-    uint32_t dds_val = pgm_read_dword(&dds_table[indice]);
-
-    // Scrittura diretta sui 4 indirizzi mappati
-    XRAM_WRITE(0x4020, (uint8_t)(dds_val & 0xFF));         // LSB
-    XRAM_WRITE(0x4021, (uint8_t)((dds_val >> 8) & 0xFF));
-    XRAM_WRITE(0x4022, (uint8_t)((dds_val >> 16) & 0xFF));
-    XRAM_WRITE(0x4023, (uint8_t)((dds_val >> 24) & 0xFF)); // MSB
-}
-
-void set_base_time(uint8_t index) {
-    // Limite di sicurezza aggiornato (0-20)
-    if (index > MAX_TIMEBASE_IDX) index = MAX_TIMEBASE_IDX;
-    
-    current_time_base_idx = index;
-
-    // Recuperiamo il valore DDS a 32 bit dalla tabella in Flash
-    uint32_t dds_val = pgm_read_dword(&dds_table[index]);
-
-    // Inviamo il valore all'FPGA usando la nuova funzione mappata
-    aggiorna_registri_dds(dds_val);
-    aggiorna_t_div(index);
-}
-
-void set_dds_frequency(uint32_t sample_rate) {
-    // Calcolo del valore di incremento per il DDS
-    // Formula: (F_sample / 60MHz) * 2^32
-    // Usiamo i double per evitare l'overflow durante il calcolo
-    double step = ((double)sample_rate / 60000000.0) * 4294967296.0;
-    uint32_t reg_val = (uint32_t)step;
-
-    // Invio dei 4 byte in sequenza
-    // La FPGA li accatasta in dds_temp fino al 4° invio
-    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)(reg_val & 0xFF));         // Byte 0 (LSB)
-    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 8) & 0xFF));  // Byte 1
-    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 16) & 0xFF)); // Byte 2
-    XRAM_WRITE(REG_DDS_ADDR, (uint8_t)((reg_val >> 24) & 0xFF)); // Byte 3 (MSB -> Trigger update)
-}
-
-void set_trigger_level(uint16_t level12)
-{
-    level12 &= 0x0FFF; 
-    uint8_t b0 = (uint8_t)(level12 & 0xFF);         // Primi 8 bit (0-7)
-    uint8_t b1 = (uint8_t)((level12 >> 8) & 0x0F);  // Altri 4 bit (8-11)
-
-    REG_TRIGGER_LEVEL = b0;   // bytecnt 00
-    REG_TRIGGER_LEVEL = b1;   // bytecnt 01
-    REG_TRIGGER_LEVEL = 0x00; // bytecnt 10 -> triggera il latch del valore
-}
-
-void set_trigger_mode(trigger_mode_t mode, trig_slope_t slope, uint8_t source)
-{
-    source -= 1;
-    if(source > 1) source = 1;
-    uint8_t v = 0;
-
-    v |= (mode & 0x3) << 6;       // bits 7..6 = mode
-    v |= (source & 0x3) << 4;     // bits 5..4 = source (00=CH1, 01=CH2)
-    v |= (slope & 1) << 3;        // bit 3 = edge
-    v |= (1 << 2);                // trig_enable = 1
-    v |= (0 << 0);                // rearm = 0
-
-    TRIG_CTRL_REG = v;
-    trigger_mode = mode;
-    trigger_slope = slope;
-
-}
-
 /***************************************************************************************
-** Function name:           draw_trace
-** Description:             Disegna e cancella la traccia usando la logica V/div
+** Function name:           acquire_and_draw
+** Description:             Coordina l'acquisizione dei campioni dall'FPGA e il rendering
+** della traccia a schermo, gestendo il refresh dei buffer.
 ***************************************************************************************/
-void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a, int16_t *old_buf_b, uint16_t length, bool vectors)
-{
-    const int16_t Y_MIN = MARGIN_Y;
-    const int16_t Y_MAX = MARGIN_Y + TRACE_H;
-
-    // --- 1. RESET VARIABILI MISURE (Locali, non static!) ---
-    uint64_t sum_sq = 0; 
-    int64_t sum_raw_acc = 0;
-    int32_t max_adc = -1;    // Inizializzazione per forzare il primo aggiornamento
-    int32_t min_adc = 4096; 
-    uint16_t samples_misure = 0;
-
-    // --- 2. CALCOLO MISURE (Ciclo lineare su tutto il buffer) ---
-    if(misure->active) {
-        for(uint16_t m = 0; m < 400; m++) {
-            // Prendiamo il dato e forziamo la pulizia a 12 bit
-            uint16_t val = (misure->source == 1) ? (uint16_t)ch1_buffer[m] : (uint16_t)ch2_buffer[m];
-            val &= 0x0FFF; 
-
-            // Aggiornamento picchi: solo se il valore è nel range reale dell'ADC
-            if ((int32_t)val > max_adc) max_adc = (int32_t)val;
-            if ((int32_t)val < min_adc) min_adc = (int32_t)val;
-
-            // Accumulo per Vavg (media)
-            sum_raw_acc += val;
-
-            // Accumulo per Vrms centrato su 2048
-            int32_t centrato = (int32_t)val - 2048;
-            sum_sq += (uint64_t)((int64_t)centrato * centrato);
-            
-            samples_misure++;
-        }
-    }
-
-    // --- 3. LOGICA TIMING DISEGNO (Invariata) ---
-    uint32_t step_fp; uint32_t ram_idx_fp;   
-    if (current_time_base_idx == 0) { step_fp = (150UL << 8) / length; ram_idx_fp = 125UL << 8; } 
-    else if (current_time_base_idx == 1) { step_fp = (300UL << 8) / length; ram_idx_fp = 50UL << 8; } 
-    else { step_fp = 1UL << 8; ram_idx_fp = 0; }
-
-    int16_t y_prev_new_a = -100, y_prev_old_a = -100;
-    int16_t y_prev_new_b = -100, y_prev_old_b = -100;
-
-
-   // --- 4. LOOP DI DISEGNO (Cancellazione SEMPRE, Tracciamento solo se ENABLED) ---
-    for (uint16_t i = 0; i < length; i++) {
-        uint16_t x = i + MARGIN_X;
-        uint16_t ram_idx = (uint16_t)(ram_idx_fp >> 8);
-        if (ram_idx >= 400) ram_idx = 399;
-
-        // --- GESTIONE CANALE A ---
-        // 1. CANCELLAZIONE (Sempre, se il vecchio punto era valido)
-        if (old_buf_a[i] > Y_MIN && old_buf_a[i] < Y_MAX) {
-            if (vectors && i > 0 && y_prev_old_a > Y_MIN) 
-                tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX-1);
-            else 
-                tft_drawPixel(x, old_buf_a[i], BLACK);
-        }
-        y_prev_old_a = old_buf_a[i];
-
-        // 2. DISEGNO NUOVO PUNTO (Solo se abilitato)
-        if (ch_a->enabled) {
-            int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[ram_idx], false);
-            if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
-                if (vectors && i > 0 && y_prev_new_a > Y_MIN) 
-                    tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX-1);
-                else 
-                    tft_drawPixel(x, y_now_a, ch_a->color);
-            }
-            y_prev_new_a = y_now_a;
-            old_buf_a[i] = y_now_a; // Salva per cancellarlo al prossimo giro
-        } else {
-            old_buf_a[i] = -100;    // Segna come vuoto per i prossimi cicli
-            y_prev_new_a = -100;
-        }
-
-        // --- GESTIONE CANALE B ---
-        // 1. CANCELLAZIONE
-        if (old_buf_b[i] > Y_MIN && old_buf_b[i] < Y_MAX) {
-            if (vectors && i > 0 && y_prev_old_b > Y_MIN) 
-                tft_drawLine_Clipped(x-1, y_prev_old_b, x, old_buf_b[i], BLACK, Y_MIN, Y_MAX);
-            else 
-                tft_drawPixel(x, old_buf_b[i], BLACK);
-        }
-        y_prev_old_b = old_buf_b[i];
-
-        // 2. DISEGNO NUOVO PUNTO
-        if (ch_b->enabled) {
-            int16_t y_now_b = calcolaYTraccia(ch_b, ch2_buffer[ram_idx], false);
-            if (y_now_b > Y_MIN && y_now_b < Y_MAX) {
-                if (vectors && i > 0 && y_prev_new_b > Y_MIN) 
-                    tft_drawLine_Clipped(x-1, y_prev_new_b, x, y_now_b, ch_b->color, Y_MIN, Y_MAX);
-                else 
-                    tft_drawPixel(x, y_now_b, ch_b->color);
-            }
-            y_prev_new_b = y_now_b;
-            old_buf_b[i] = y_now_b;
-        } else {
-            old_buf_b[i] = -100;
-            y_prev_new_b = -100;
-        }
-
-        ram_idx_fp += step_fp;
-    }
-
-    // --- 5. CALCOLO FINALE MISURE (Senza ambiguità) ---
-    if(misure->active && samples_misure > 0) {
-        Channel *ch_src = (misure->source == 1) ? ch_a : ch_b;
-        const float LSB = (10.0f / 4096.0f) * ch_src->multiplier;
-
-        // Calcolo Vpp: usiamo int32_t per la differenza e poi forziamo il valore assoluto
-        int32_t delta = max_adc - min_adc;
-        if (delta < 0) delta = 0; // Protezione contro inizializzazioni fallite
-        misure->vpp = (float)delta * LSB;
-
-        // Vavg
-        float avg_raw = ((float)sum_raw_acc / (float)samples_misure) - 2048.0f;
-        misure->vavg = avg_raw * LSB;
-
-        // Vrms
-        float rms_pts = sqrtf((float)sum_sq / (float)samples_misure);
-        misure->vrms = rms_pts * LSB;
-    }
-}
-
-static inline void osc_arm_readout(void)
-{
-    REG_INDEX = 0;
-}
-
-void disegna_linea_cursore_v(int16_t y, uint16_t colore) {
-    // Disegna una linea orizzontale tratteggiata (asse X: 0-400)
-    for (int16_t x = 0; x < 400; x += 8) {
-        tft_drawFastHLine(MARGIN_X + x, y, 4, colore); // Disegna 4 pixel, ne salta 4
-    }
-}
-
-void disegna_linea_cursore_h(int16_t x, uint16_t colore) {
-    // Disegna una linea verticale tratteggiata (asse Y: 0-240)
-    for (int16_t y = 0; y < 240; y += 8) {
-        tft_drawFastVLine(x, MARGIN_Y + y, 4, colore);
-    }
-}
-
-void tft_drawGrid(uint16_t color) {
-    int16_t xStart = MARGIN_X;
-    int16_t yStart = MARGIN_Y;
-    int16_t xEnd   = MARGIN_X + TRACE_W;
-    int16_t yEnd   = MARGIN_Y + TRACE_H;
-
-    uint8_t gridSpacing = 40;  // Orizzontale (Tempo)
-    uint8_t gridVSpacing = 30; // Verticale (Tensione)
-    uint8_t dotSpacing  = 4;
-
-    // Calcoliamo le coordinate centrali
-    // Nota: Assicurati che TRACE_W/2 e TRACE_H/2 siano multipli di gridSpacing
-    int16_t xCenter = xStart + (TRACE_W / 2);
-    int16_t yCenter = yStart + (TRACE_H / 2);
-
-    // 1. Linee Orizzontali
-    for (int16_t y = yStart; y <= yEnd; y += gridVSpacing) {
-        // Se è la linea centrale orizzontale, usiamo passo 1 (linea continua)
-        // altrimenti usiamo dotSpacing
-        uint8_t step = (y == yCenter) ? 2 : dotSpacing;
-        
-        for (int16_t x = xStart; x <= xEnd; x += step) {
-            tft_drawPixel(x, y, color);
-        }
-    }
-
-    // 2. Linee Verticali
-    for (int16_t x = xStart; x <= xEnd; x += gridSpacing) {
-        // Se è la linea centrale verticale, usiamo passo 1 (linea continua)
-        // altrimenti usiamo dotSpacing
-        uint8_t step = (x == xCenter) ? 2 : dotSpacing;
-
-        for (int16_t y = yStart; y <= yEnd; y += step) {
-            tft_drawPixel(x, y, color);
-        }
-    }
-}
-
-void osc_read_triggered()
-{
-    /* 1. Controllo preliminare: se siamo in freeze, non aggiorniamo nulla */
-    if (freeze) {
-        // Opzionale: se serve rinfrescare il readout hardware
-        // osc_arm_readout(); 
-        return; 
-    }
-
-    /* 2. Controllo Trigger NON BLOCCANTE */
-    // Verifichiamo se l'FPGA è READY. Se non lo è, usciamo immediatamente.
-    // In questo modo i buffer 'a' e 'b' restano intatti con i vecchi dati.
-    if (!(REG_TRIG & (1 << READY_BIT))) {
-        return; // Torna al main: i tasti e il Pan risponderanno subito!
-    }
-
-    /* 3. Se arriviamo qui, l'FPGA è scattata (Dati pronti!) */
-    if (trigger_mode == TRIG_MODE_SINGLE) {
-        freeze = true; // Blocca i futuri aggiornamenti
-    }
-    
-    // Avvia trasferimento dati da FPGA a AVR
-    osc_arm_readout(); 
-
-    // 4. LETTURA DALLA BRAM (Sempre 4 byte per sincronismo FPGA)
-        // Offset 0,1 -> Canale A | Offset 2,3 -> Canale B
-        // --- RESET INDICE HARDWARE ---
-    INDEX_RESET = 0x01; 
-    for(uint16_t i = 0; i < 400; i++) {
-        uint8_t a_l = BRAM_DATA_PTR[0];
-        uint8_t a_h = BRAM_DATA_PTR[1];
-        uint8_t b_l = BRAM_DATA_PTR[2];
-        uint8_t b_h = BRAM_DATA_PTR[3]; // Qui l'FPGA incrementa reg_index_int
-        ch1_buffer[i] = (a_h << 8) | a_l;
-        ch2_buffer[i] = (b_h << 8) | b_l;
-    }
-    /* 5. Riarmo Trigger automatico */
-    if (is_running && !(trigger_mode == TRIG_MODE_SINGLE && freeze)) {
-        REG_TRIG = 0x01;
-    }
-}
-
-static inline void osc_write_view_offset(int16_t offset)
-{
-    REG_BASETIME = 0xFF;                         // escape
-    REG_BASETIME = 0x01;                         // comando: view_offset
-    REG_BASETIME = (uint8_t)(offset & 0xFF);     // LSB
-    REG_BASETIME = (uint8_t)(offset >> 8);       // MSB
-    REG_BASETIME = 0xFF;
-
-}
-
-
-void drawPanTrack(){
-
-    int16_t offset = (TRACE_W / 2) - view_offset + MARGIN_X + 1; // +1 per allineare meglio il triangolo alla griglia
-
-    Point_t a = { offset - 5, MARGIN_Y };
-    Point_t b = { offset + 5, MARGIN_Y };
-    Point_t c = { offset, MARGIN_Y + 10 };
-    
-    if(pan_flag){
-        tft_FillTriangle(old_a, old_b, old_c, BLACK);
-        old_a = a;
-        old_b = b;
-        old_c = c;
-    }
-    tft_FillTriangle(a, b, c, WHITE);
-}
-
-/***************************************************************************************
-** Function name:           calcolaYTraccia
-** Description:             Converte il valore ADC in coordinata Y pixel basandosi
-** sui parametri del canale (V/div, offset, invert).
-***************************************************************************************/
-int16_t calcolaYTraccia(Channel *ch, uint16_t valoreADC_12bit, bool isTrigger) {
-    static const float RANGE_TOTALE = 10.0f; 
-    static const float ADC_RESOLUTION = 4096.0f;
-    static const float BITS_PER_VOLT = ADC_RESOLUTION / RANGE_TOTALE; // 409.6
-    static const float ADC_ZERO = 2048.0f;
-    static const float PIXEL_PER_DIV = 30.0f;
-
-    // 1. Delta rispetto al centro
-    float deltaADC = (float)valoreADC_12bit - ADC_ZERO;
-
-    // 2. Volt reali
-    float volt = deltaADC / BITS_PER_VOLT;
-
-    // 3. Quanti pixel si deve spostare (es. 1V = 2 divisioni = 60 pixel)
-    float pixelSpostamento = (volt / ch->volts_div) * PIXEL_PER_DIV;
-
-    // --- CORREZIONE INVERSIONE ---
-    // Se il segnale è positivo (volt > 0), vogliamo che la Y diminuisca 
-    // per andare verso l'alto dello schermo.
-    if (ch->inverted) {
-        return (int16_t)(ch->offset - pixelSpostamento); 
-    } else {
-        return (int16_t)(ch->offset + pixelSpostamento);
-    }
-}
-
-
-void draw_ground_marker(Channel *ch) {
-    // 1. La posizione Y dello zero è data direttamente dal valore di ch->offset
-    int16_t y_zero = ch->offset;
-
-    // 2. Gestione della cancellazione
-    // Se l'offset è cambiato, cancelliamo il triangolo nella vecchia posizione
-    if (ch->offset != ch->old_offset) {
-        // Calcoliamo i vecchi vertici basandoci su old_offset per cancellarli con precisione
-        Point_t old_a, old_b, old_c;
-        uint16_t x_tip = MARGIN_X + 8;
-        uint16_t x_base = MARGIN_X;
-
-        old_a.x = x_base; old_a.y = ch->old_offset - 5;
-        old_b.x = x_base; old_b.y = ch->old_offset + 5;
-        old_c.x = x_tip;  old_c.y = ch->old_offset;
-
-        tft_FillTriangle(old_a, old_b, old_c, BLACK);
-        
-        // Aggiorniamo old_offset dopo la cancellazione
-        ch->old_offset = ch->offset;
-    }
-
-    // 3. Calcolo nuove coordinate del marker
-    uint16_t x_tip = MARGIN_X + 8;
-    uint16_t x_base = MARGIN_X;
-
-    ch->gnd_mark_a.x = x_base;
-    ch->gnd_mark_a.y = y_zero - 5;
-    
-    ch->gnd_mark_b.x = x_base;
-    ch->gnd_mark_b.y = y_zero + 5;
-    
-    ch->gnd_mark_c.x = x_tip;
-    ch->gnd_mark_c.y = y_zero;
-
-    // 4. Scelta del colore (pieno se focused, spento se no)
-    uint16_t draw_color = ch->color;
-    if (!ch->focused) {
-        // Scuriamo il colore per i canali non selezionati (effetto Tek)
-        draw_color = (ch->color >> 1) & 0x7BEF; 
-    }
-
-    // 5. Disegno del triangolo nelle nuove coordinate
-    if (ch->enabled) {
-        tft_FillTriangle(ch->gnd_mark_a, ch->gnd_mark_b, ch->gnd_mark_c, draw_color);
-        
-        // Se vuoi aggiungere il numero del canale (opzionale)
-        // tft_setTextColor(WHITE);
-        // tft_printAt(ch == &ch1 ? "1" : "2", x_base + 1, y_zero - 4, WHITE, BLACK, 1);
-    }
-}
-
-/********************CURSORS***********************/
-
-
-
-
-void calcola_e_stampa_dati_cursori() {
-    if (cursor_type == CUR_OFF) return;
-
-    // --- VARIABILI STATICHE PER MEMORIA ---
-    static int16_t last_v_a = -32000, last_v_b = -32000;
-    static int16_t last_h_a = -32000, last_h_b = -32000;
-    static float last_vdiv1 = -1, last_vdiv2 = -1;
-    static float last_tdiv = -1;
-    static uint8_t last_type = 255;
-    static uint8_t last_source = 255;
-
-    // --- RILEVAMENTO CAMBIAMENTI ---
-    Channel *ch = (cursor_source == 1) ? &ch1 : &ch2;
-    bool changed = (cursor_type != last_type) || (cursor_source != last_source) ||
-                   (ch->volts_div != (cursor_source == 1 ? last_vdiv1 : last_vdiv2)) ||
-                   (timebase_seconds[current_time_base_idx] != last_tdiv);
-
-    if (cursor_type == CUR_VOLT) {
-        if (cursor_v_a != last_v_a || cursor_v_b != last_v_b || changed) {
-            float inv = (ch->inverted) ? -1.0 : 1.0;
-            float v_per_px = (ch->volts_div / 25.0) * inv;
-            float va = (float)(ch->offset - cursor_v_a) * v_per_px;
-            float vb = (float)(ch->offset - cursor_v_b) * v_per_px;
-            float dv = va - vb;
-            char buf[24], val_str[12];
-
-            // V(A)
-            dtostrf(va, 1, 2, val_str);
-            //sprintf(buf, "%c%sV", (va >= 0 ? '+' : ' '), val_str); // Spazio se negativo per allineamento
-            char* p = buf;
-            *p++ = (va >= 0 ? '+' : ' '); // Aggiunge il segno o lo spazio
-            p = append_str(p, val_str);    // Incolla il numero convertito da dtostrf
-            p = append_str(p, " V");       // Aggiunge spazio e unità (Maiuscola!)
-            drawTextButton(3, buf, "", WHITE);
-
-            // V(B)
-            dtostrf(vb, 1, 2, val_str);
-            //sprintf(buf, "%c%sV", (vb >= 0 ? '+' : ' '), val_str);
-            p = buf;                      // Puntatore all'inizio del buffer
-            *p++ = (vb >= 0 ? '+' : ' ');       // Scrive il segno o lo spazio e sposta il puntatore
-            p = append_str(p, val_str);         // Copia il numero (restituisce la posizione della fine)
-            *p++ = ' ';                         // (Opzionale) Spazio prima della V per leggibilità
-            *p++ = 'V';                         // Scrive la V
-            *p = '\0';                          // Chiude la stringa (fondamentale!)
-            drawTextButton(4, buf, "", WHITE);
-
-            // Delta V
-            dtostrf(dv, 1, 2, val_str);
-            //sprintf(buf, "%c%sV", (dv >= 0 ? '+' : ' '), val_str);
-            p = buf;
-            *p++ = (dv >= 0 ? '+' : ' ');
-            p = append_str(p, val_str);
-            *p++ = 'V';
-            *p = '\0';
-            drawTextButton(2, buf, "", WHITE);
-
-            // Aggiorna memoria
-            last_v_a = cursor_v_a; last_v_b = cursor_v_b;
-        }
-    } 
-    else if (cursor_type == CUR_TIME) {
-        if (cursor_h_a != last_h_a || cursor_h_b != last_h_b || changed) {
-            float current_tb = timebase_seconds[current_time_base_idx]; 
-            float t_per_px = current_tb / 40.0; 
-            float ta = (float)(cursor_h_a - 200) * t_per_px;
-            float tb = (float)(cursor_h_b - 200) * t_per_px;
-            float dt = ta - tb;
-            float abs_dt = (dt < 0) ? -dt : dt;
-
-            // T(A) e T(B)
-            float tempi[2] = {ta, tb};
-            char* targets[2] = {str_ta, str_tb};
-            for(int i = 0; i < 2; i++) {
-                float abs_t = (tempi[i] < 0) ? -tempi[i] : tempi[i];
-                char n_buf[12];
-                if (abs_t < 0.000001f) {
-                    dtostrf(abs_t * 1e9, 1, 0, n_buf);
-                    //sprintf(targets[i], "%c%s ns", (tempi[i] < 0 ? '-' : '+'), n_buf);
-                    char* p = targets[i];            // Puntiamo all'inizio della stringa di destinazione
-                    *p++ = (tempi[i] < 0 ? '-' : '+'); // Scrive il segno e sposta il puntatore
-                    p = append_str(p, n_buf);        // Incolla il valore numerico (es. "250")
-                    p = append_str(p, " ns");        // Aggiunge spazio e unità (Maiuscolo per il font!)
-                    // La funzione append_str chiude già con '\0', quindi siamo a posto.
-                } else if (abs_t < 0.001f) {
-                    dtostrf(abs_t * 1e6, 1, 2, n_buf);
-                    //sprintf(targets[i], "%c%s us", (tempi[i] < 0 ? '-' : '+'), n_buf);
-                    char* p = targets[i];
-                    *p++ = (tempi[i] < 0 ? '-' : '+');
-                    p = append_str(p, n_buf);
-                    p = append_str(p, " us");   
-                } else {
-                    dtostrf(abs_t * 1e3, 1, 2, n_buf);
-                    //sprintf(targets[i], "%c%s ms", (tempi[i] < 0 ? '-' : '+'), n_buf);
-                    char* p = targets[i];
-                    *p++ = (tempi[i] < 0 ? '-' : '+');
-                    p = append_str(p, n_buf);
-                    p = append_str(p, " ms");
-                }
-            }
-            drawTextButton(3, str_ta, "", WHITE);
-            drawTextButton(4, str_tb, "", WHITE);
-
-            // Delta T
-            char dt_buf[24], n_buf[12];
-            if (abs_dt < 0.000001f) {
-                dtostrf(abs_dt * 1e9, 1, 0, n_buf);
-                //sprintf(dt_buf, "%s ns", n_buf);
-                char* p = dt_buf;      // Punta all'inizio del buffer di destinazione
-                p = append_str(p, n_buf); // Incolla il numero e sposta il puntatore alla fine
-                append_str(p, " ns");     // Aggiunge lo spazio, l'unità e chiude la stringa
-            } else if (abs_dt < 0.001f) {
-                dtostrf(abs_dt * 1e6, 1, 2, n_buf);
-                //sprintf(dt_buf, "%s us", n_buf);
-                char* p = dt_buf;
-                p = append_str(p, n_buf);
-                p = append_str(p, " us");
-            } else {
-                dtostrf(abs_dt * 1e3, 1, 2, n_buf);
-                //sprintf(dt_buf, "%s ms", n_buf);
-                char* p = dt_buf;
-                p = append_str(p, n_buf);
-                p = append_str(p, " ms");
-            }
-
-            // Frequenza
-            char f_buf[20], f_num[12];
-            if (abs_dt > 0) {
-                float freq = 1.0f / abs_dt;
-                if (freq >= 1000000.0f) {
-                    dtostrf(freq / 1e6, 1, 1, f_num);
-                    //sprintf(f_buf, "%s MHz", f_num);
-                    char* p = f_buf;          // Punta all'inizio del buffer della frequenza
-                    p = append_str(p, f_num); // Incolla il numero (es. "1.25")
-                    append_str(p, " MHz");    // Aggiunge lo spazio e l'unità in minuscolo
-                } else if (freq >= 1000.0f) {
-                    dtostrf(freq / 1e3, 1, 1, f_num);
-                    //sprintf(f_buf, "%s KHz", f_num);
-                    char* p = f_buf;
-                    p = append_str(p, f_num);
-                    p = append_str(p, " KHz");
-                } else {
-                    dtostrf(freq, 1, 1, f_num);
-                    //sprintf(f_buf, "%s Hz", f_num);
-                    char* p = f_buf;
-                    p = append_str(p, f_num);
-                    p = append_str(p, " Hz");
-                }
-            } else {
-                //sprintf(f_buf, "--- Hz");
-                char* p = f_buf;
-                p = append_str(p, "--- Hz");
-            }
-            
-            drawTextButton(2, dt_buf, f_buf, WHITE);
-
-            // Aggiorna memoria
-            last_h_a = cursor_h_a; last_h_b = cursor_h_b;
-        }
-    }
-
-    // Sincronizza stati globali
-    last_type = cursor_type;
-    last_source = cursor_source;
-    last_vdiv1 = ch1.volts_div;
-    last_vdiv2 = ch2.volts_div;
-    last_tdiv = timebase_seconds[current_time_base_idx];
-}
-
-
-void aggiorna_grafica_cursori() {
-    static uint8_t old_type = CUR_OFF;
-    static int16_t ov_a = -1, ov_b = -1, oh_a = -1, oh_b = -1;
-
-    // --- 1. GESTIONE CAMBIO MODALITÀ (Cancellazione totale precedente) ---
-    if (cursor_type != old_type) {
-        if (old_type == CUR_VOLT) {
-            if (ov_a != -1) disegna_linea_cursore_v(ov_a, BLACK);
-            if (ov_b != -1) disegna_linea_cursore_v(ov_b, BLACK);
-        } 
-        else if (old_type == CUR_TIME) {
-            if (oh_a != -1) disegna_linea_cursore_h(oh_a, BLACK);
-            if (oh_b != -1) disegna_linea_cursore_h(oh_b, BLACK);
-        }
-        old_type = cursor_type;
-        ov_a = -1; ov_b = -1; oh_a = -1; oh_b = -1;
-        if (cursor_type == CUR_OFF) return;
-    }
-
-    if (cursor_type == CUR_OFF) return;
-
-    // --- 2. LOGICA DI DISEGNO/AGGIORNAMENTO ---
-    if (cursor_type == CUR_VOLT) {
-        // Cursore A
-        if (cursor_v_a != ov_a) {
-            if (ov_a != -1) disegna_linea_cursore_v(ov_a, BLACK); // Cancella solo se spostato
-            ov_a = cursor_v_a;
-        }
-        disegna_linea_cursore_v(ov_a, WHITE); // Disegna SEMPRE nella posizione attuale
-
-        // Cursore B
-        if (cursor_v_b != ov_b) {
-            if (ov_b != -1) disegna_linea_cursore_v(ov_b, BLACK);
-            ov_b = cursor_v_b;
-        }
-        disegna_linea_cursore_v(ov_b, WHITE);
-    } 
-    else if (cursor_type == CUR_TIME) {
-        // Cursore A
-        if (cursor_h_a != oh_a) {
-            if (oh_a != -1) disegna_linea_cursore_h(oh_a, BLACK);
-            oh_a = cursor_h_a;
-        }
-        disegna_linea_cursore_h(oh_a, WHITE);
-
-        // Cursore B
-        if (cursor_h_b != oh_b) {
-            if (oh_b != -1) disegna_linea_cursore_h(oh_b, BLACK);
-            oh_b = cursor_h_b;
-        }
-        disegna_linea_cursore_h(oh_b, WHITE);
-    }
-
-    // Aggiorna i testi (che hanno già la loro logica interna di risparmio CPU)
-    calcola_e_stampa_dati_cursori();
-}
-
 void acquire_and_draw(){
     // 1. ACQUISIZIONE (Condizionale)
     // Proviamo a leggere solo se siamo in RUN o in un SINGLE attivo
@@ -874,13 +163,10 @@ void acquire_and_draw(){
         osc_read_triggered();
     }
 
-
-    
     tft_drawGrid(LIGHTGREY);
 
     draw_dual_trace_from_bram(&ch1, &ch2, old_buffer_a, old_buffer_b, 400, true);
 
-    
     // UI e Marker (Sempre visibili per poterli muovere in STOP)
     draw_trigger_line(trigger_level_12bit, ORANGE, false);
     draw_ground_marker(&ch1);
@@ -890,66 +176,11 @@ void acquire_and_draw(){
     
 }
 
-void drawTextButton(uint8_t index, const char* data1, const char* data2, uint16_t color) {
-    uint16_t y = 25 + (index * 49); // Calcola posizione Y in base all'indice
-    uint16_t bgColor = BLACK;       // Definiamo lo sfondo fisso a nero
-    
-    tft_fillRect(410, y + 12, 68, 34, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
-    // 1. Disegna la cornice del bottone
-    //tft_drawRect(410, y, 65, 40, color);
-    tft_drawFastHLine(415, y, 58, color); // Linea di divisione orizzontale
-
-    // 3. Scrivi il testo passando tutti i parametri richiesti dalla tua funzione
-    tft_printCenteredX(data1, 410, 479, y + 15, color, bgColor, 2); 
-    tft_printCenteredX(data2, 410, 479, y + 32, color, bgColor, 2);
-}
-
-void drawMenuButton(uint8_t index, const char* label, const char* data, bool active, uint16_t color) {
-    uint16_t y = 25 + (index * 49); // Calcola posizione Y in base all'indice
-    uint16_t bgColor = BLACK;       // Definiamo lo sfondo fisso a nero
-    
-    tft_fillRect(410, y, 68, 48, bgColor); // Pulisce l'area del bottone prima di ridisegnarlo
-    // 1. Disegna la cornice del bottone
-    //tft_drawRect(410, y, 65, 40, color);
-    tft_drawFastHLine(415, y, 58, color); // Linea di divisione orizzontale
-
-    // 3. Scrivi il testo passando tutti i parametri richiesti dalla tua funzione
-    tft_printCenteredX(label, 410, 479, y + 5, color, bgColor, 1); 
-    tft_printCenteredX(data, 410, 479, y + 20, color, bgColor, 2);
-}
-
-void drawStaticInterface() {
-    // 1. Pulisce tutto lo schermo
-    tft_fillScreen(BLACK);
-    
-    // 2. Barra Superiore (Status e Misure rapide)
-    tft_fillRect(0, 0, 409, 20, DARKGREY);
-    tft_printAt("Mje", 10, 5, GREEN, DARKGREY, 2);
-    //tft_printAt("T: 100uS", 120, 5, WHITE, DARKGREY);
-    //tft_printAt("Vpp: 3.24V", 250, 5, YELLOW, DARKGREY);
-
-    // --- TITOLO MENU A DESTRA (Sopra i tasti) ---
-    const char* menuName;
-    if (currentMenu == MENU_CH1)      menuName = "CH 1";
-    else if (currentMenu == MENU_CH2) menuName = "CH 2";
-    else if (currentMenu == MENU_TRIG) menuName = "TRIG";
-    else                              menuName = "MENU";
-    
-    tft_printAt(menuName, 430, 5, WHITE, DARKGREY, 2);
-
-    // 3. Cornice Area Traccia (400x240)
-    tft_drawRect(MARGIN_X - 1, MARGIN_Y - 1, TRACE_W + 2, TRACE_H + 2, WHITE);
-    
-    // 4. Linea di divisione Sidebar
-    tft_drawLine(SIDEBAR_X - 2, 20, SIDEBAR_X - 2, TRACE_H + MARGIN_Y, GREY);
-
-    
-
-    updateSidebarLabels(); // Aggiorna tutte le etichette in base allo stato attuale (usa i dati nelle struct)
-    // 6. Ripristina la griglia
-    tft_drawGrid(LIGHTGREY);
-}
-
+/***************************************************************************************
+** Function name:           cycleCoupling
+** Description:             Gestisce la commutazione ciclica dell'accoppiamento del canale
+** (DC, AC, GND) e aggiorna l'interfaccia utente.
+***************************************************************************************/
 void cycleCoupling(Channel *ch) 
 {
     // 1. Cicla tra 0, 1 e 2 direttamente nella struct del canale
@@ -983,6 +214,11 @@ void cycleCoupling(Channel *ch)
     drawMenuButton(0, "Coupling", data, true, WHITE); 
 }
 
+/***************************************************************************************
+** Function name:           toggleBWLimit
+** Description:             Attiva o disattiva il filtro di limitazione della banda
+** passante (Bandwidth Limit) per il canale selezionato.
+***************************************************************************************/
 void toggleBWLimit(Channel *ch) 
 {
     // 1. Inverte lo stato del filtro (0 o 1)
@@ -1006,7 +242,11 @@ void toggleBWLimit(Channel *ch)
     drawMenuButton(1, "BW Limit", data, true, WHITE); 
 }
 
-
+/***************************************************************************************
+** Function name:           aggiornaMoltiplicatoreSonda
+** Description:             Cicla il fattore di attenuazione della sonda (1x, 10x, 100x)
+** e ricalcola i parametri di visualizzazione per mantenere corretta la scala Volt.
+***************************************************************************************/
 void aggiornaMoltiplicatoreSonda(Channel *ch) 
 {
     // Usiamo direttamente ch->probe (che è già stato aggiornato da cycleProbe)
@@ -1027,6 +267,11 @@ void aggiornaMoltiplicatoreSonda(Channel *ch)
     }
 }
 
+/***************************************************************************************
+** Function name:           cycleProbe
+** Description:             Cicla le impostazioni di attenuazione della sonda (1X, 10X, 100X)
+** aggiornando i parametri di calcolo e l'interfaccia grafica del menu.
+***************************************************************************************/
 void cycleProbe(Channel *ch) 
 {
     // 1. Cicla tra le tre impostazioni direttamente nella struct (0=1X, 1=10X, 2=100X)
@@ -1056,165 +301,11 @@ void cycleProbe(Channel *ch)
     drawMenuButton(3, "Probe", data, true, WHITE); 
 }
 
-
-void set_trig_enc_default()
-{
-    current_enc_mode = ENC_MODE_TRIGGER_LEVEL;
-    setup_encoder(5, trigger_level_12bit, TRIG_MIN, TRIG_MAX, TRIG_STEP);
-    /*configure_encoder(5, PARAM_MIN, TRIG_MIN);
-    configure_encoder(5, PARAM_MAX, TRIG_MAX);
-    configure_encoder(5, PARAM_STEP, TRIG_STEP);
-    configure_encoder(5, PARAM_C_VAL, trigger_level_12bit);*/
-}
-
-
-uint8_t oldMenu = 0xFF; // Valore iniziale invalido per forzare l'aggiornamento al primo ciclo
-void updateSidebarLabels() {
-    if(currentMenu != oldMenu) {
-        set_trig_enc_default();
-        cursor_type = CUR_OFF; // Spegniamo i cursori quando cambiamo menu per evitare confusione
-
-        setup_encoder(0, OFFSET_Y1_C_VAL, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP);
-        setup_encoder(2, OFFSET_Y2_C_VAL, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP);
-
-
-        oldMenu = currentMenu;
-    }
-    // --- 1. AGGIORNAMENTO NOME MENU NELLA BARRA SUPERIORE ---
-    const char* menuTitle;
-    uint16_t menuColor; // Variabile per il colore del titolo
-    switch (currentMenu) {
-        case MENU_CH1:
-            menuTitle = "CH 1";
-            menuColor = ch1.color;  // Colore traccia 1
-            break;
-            
-        case MENU_CH2:
-            menuTitle = "CH 2";
-            menuColor = ch2.color;    // Colore traccia 2
-            break;
-            
-        case MENU_TRIG:
-            menuTitle = "TRIGER";
-            menuColor = YELLOW; // Colore linea trigger
-            break;
-            
-        case MENU_MEAS:
-            menuTitle = "MEASURE";
-            menuColor = WHITE;
-            break;
-        
-        case MENU_CURSORS:
-            menuTitle = "CURSORS";
-            menuColor = GREENYELLOW;
-            break;
-            
-        default:
-            menuTitle = " MENU ";
-            menuColor = CYAN;
-            break;
-    }
-    
-    // Scriviamo il titolo del menu centrato sopra i tasti, con il colore specifico
-    tft_fillRect(410, 0, 79, 20, BLACK);
-    //tft_fillRect(411, 20, 68, 48, BLACK); // Pulisce l'area dei tasti per evitare residui di menu precedenti
-    tft_printCenteredX(menuTitle, 410, 475, 5, menuColor, BLACK, 2); // Opzione centrata
-
-    // --- 2. LOGICA TASTI SIDEBAR ---
-
-    if (currentMenu == MENU_CH1 || currentMenu == MENU_CH2) {
-        // 1. Puntatore al canale basato sul menu aperto
-        Channel *ch = (currentMenu == MENU_CH1) ? &ch1 : &ch2;
-        //const char* chName = (currentMenu == MENU_CH1) ? "CH1" : "CH2";
-
-        // TASTO 0: Accoppiamento (Aggiungi 'coupling' alla struct!)
-        // 0: DC, 1: AC, 2: GND
-        const char* couplLabels[] = {"DC", "AC", "GND"};
-        drawMenuButton(0, "Coupling", couplLabels[ch->coupling], true, WHITE);
-
-        // TASTO 1: Limite banda (Non implementato, mettiamo un placeholder)
-        drawMenuButton(1, "BW Limit", "FULL ",false, WHITE);
-
-        // TASTO 2: Volt/div (Focus sull'encoder, ma mostriamo anche il moltiplicatore della sonda)
-        //char vdivLabel[10];
-        //sprintf(vdivLabel, "V/DIV: %.1f", ch->volts_div);
-        const char* vdivLabel[] = {"COARSE", "Fine"};
-        drawMenuButton(2, "V/DIV", vdivLabel[ch->isFine], false, WHITE);
-
-        // TASTO 3: Sonda (Aggiungi 'probe' alla struct!)
-        const char* probeLabels[] = {"1X", "10X", "100X"};
-        drawMenuButton(3, "Probe", probeLabels[ch->probe], true, WHITE);
-
-        // TASTO 3: Inversione (Usiamo ch->inverted)
-        drawMenuButton(4, "Invert", ch->inverted ? "ON" : "OFF", ch->inverted, WHITE);
-
-    }
-    
-    else if (currentMenu == MENU_TRIG) {
-    // TASTO 0: Sorgente (CH1/CH2)
-    drawMenuButton(0, "Source", (trigger_source == 1) ? "CH1" : "CH2", true, WHITE);
-
-    // TASTO 1: Slope (RISE/FALL)
-    drawMenuButton(1, "Slope", (trigger_slope == 1) ? "RISE" : "FALL", true, WHITE);
-
-    // TASTO 2: Modalità (AUTO/NORMAL)
-    drawMenuButton(2, "Mode", (trigger_mode == 0) ? "AUTO" : "NORM", true, WHITE);
-
-    // TASTO 3: Funzione Encoder (Level / Hysteresis)
-    // Se l'encoder è in modalità Hysteresis, evidenziamo il tasto o cambiamo testo
-    char hyst_str[8];
-    //sprintf(hyst_str, "%u", (unsigned int)trigger_hysteresis);
-    utoa((unsigned int)trigger_hysteresis, hyst_str, 10);
-    if (current_enc_mode == ENC_MODE_HYSTERESIS) {
-        
-        drawMenuButton(3, "Hyst:", hyst_str, true, YELLOW); // Cambia colore per attirare l'attenzione
-    } else {
-        drawMenuButton(3, "Hyst:", hyst_str, true, WHITE);
-    }
-
-    // TASTO 4: Libero (o magari un Reset Trigger)
-    drawMenuButton(4, "", "", true, WHITE);
-}
-    else if (currentMenu == MENU_MEAS) {
-        drawMenuButton(0, "Source", (misure->source == 1) ? "CH1" : "CH2", true, WHITE);
-
-        const char* measLabels[] = {"VPP", "VAVG", "VRMS"};
-        drawMenuButton(1, "Type", measLabels[misure->type], true, WHITE);
-
-
-        drawMenuButton(2, "Show", (misure->active == 0) ? "OFF" : "ON", true, WHITE);
-        drawMenuButton(3, "Freq.", (misure->f_active == 0) ? "OFF" : "ON", true, WHITE);
-        drawMenuButton(4, "", "", true, WHITE);
-        
-    }
-    else if (currentMenu == MENU_CURSORS) {
-        // TASTO 0: Tipo di Cursore (OFF, VOLT, TIME)
-        const char* typeLabels[] = {"OFF", "VOLT", "TIME"};
-        drawMenuButton(0, "Type", typeLabels[cursor_type], (cursor_type > 0), WHITE);
-        drawMenuButton(1, "Source", (cursor_source == 1) ? "CH1" : "CH2", true, WHITE);
-        // TASTO 1: Sorgente (CH1 / CH2)
-        if(cursor_type == CUR_OFF){
-            
-            drawMenuButton(2, "", "", true, WHITE);
-            drawMenuButton(3, "", "", true, WHITE);
-            drawMenuButton(4, "", "", true, WHITE);
-        }else if(cursor_type == CUR_VOLT){
-
-            drawMenuButton(2, "dV", "", false, WHITE);
-            drawMenuButton(3, "Cursor 1", "", false, WHITE);
-            drawMenuButton(4, "Cursor 2", "", false, WHITE);
-        }else if (cursor_type == CUR_TIME){
-
-            drawMenuButton(2, "dT dF", "", false, WHITE);
-            drawMenuButton(3, "Cursor 1", "", false, WHITE);
-            drawMenuButton(4, "Cursor 2", "", false, WHITE);
-        }
-        
-    }
-    tft_drawFastHLine(415, TRACE_H + MARGIN_Y + 2, 58, WHITE);
-    tft_drawFastHLine(415, TRACE_H + MARGIN_Y + TRACE_H + 2, 58, WHITE);
-}
-
+/***************************************************************************************
+** Function name:           toggleFineCoarse
+** Description:             Alterna tra la regolazione a passi standard (Coarse) e la
+** regolazione fine dei Volt/div, riconfigurando l'encoder.
+***************************************************************************************/
 void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
     ch->isFine = !ch->isFine;
 
@@ -1263,6 +354,11 @@ void toggleFineCoarse(Channel *ch, int16_t *last_enc) {
     drawMenuButton(2, "V/DIV", ch->isFine ? "FINE" : "COARSE", ch->isFine, WHITE);
 }
 
+/***************************************************************************************
+** Function name:           toggleInvert
+** Description:             Inverte la polarità del segnale visualizzato per il canale
+** selezionato e aggiorna lo stato dell'interfaccia utente.
+***************************************************************************************/
 void toggleInvert(Channel *ch) 
 {
     // 1. Inverte lo stato booleano direttamente nella struct
@@ -1285,461 +381,52 @@ void toggleInvert(Channel *ch)
 
 }
 
-float read_fpga_frequency() {
-    static float history[FREQ_AVG_SAMPLES] = {0};
-    static uint8_t idx = 0;
-    static float sum = 0;
-    static uint8_t count = 0;
-    static float last_stable_freq = 0;
-
-    if (is_running && !pan_flag && !freeze) {
-        // Lettura registri (Assicurati che l'FPGA faccia il LATCH di tutti e 4 insieme)
-        uint32_t period = ((uint32_t)REG_FREQ3 << 24) | 
-                          ((uint32_t)REG_FREQ2 << 16) | 
-                          ((uint32_t)REG_FREQ1 << 8)  | 
-                           (uint32_t)REG_FREQ0;
-
-        // Se il periodo è 0 o il watchdog dell'FPGA è intervenuto (FFFFFFFF)
-        if (period == 0 || period == 0xFFFFFFFF) {
-            // Svuota velocemente la media se non c'è segnale
-            sum = 0; count = 0; idx = 0;
-            for(int i=0; i<FREQ_AVG_SAMPLES; i++) history[i] = 0;
-            last_stable_freq = 0;
-            return 0;
-        }
-
-        // Calcolo frequenza istantanea
-        // 3.840.000.000 = 60MHz * 64 (gate count)
-        float instant_freq = 3840000000.0f / (float)period;
-
-        // Filtro di plausibilità (evita spike assurdi)
-        // Se la frequenza salta del 1000% in un colpo solo, ignoralo o gestiscilo
-        if (count > 0 && instant_freq > last_stable_freq * 10.0f && last_stable_freq > 1.0f) {
-             return last_stable_freq; 
-        }
-
-        // Aggiornamento Media Mobile
-        sum -= history[idx];
-        history[idx] = instant_freq;
-        sum += history[idx];
-        
-        idx = (idx + 1) % FREQ_AVG_SAMPLES;
-        if (count < FREQ_AVG_SAMPLES) count++;
-
-        last_stable_freq = sum / count;
-    } 
-    
-    return last_stable_freq;
-}
-
-void draw_trigger_line(uint16_t level12, uint16_t color, bool erase) {
-    Channel *trig_ch = (trigger_source == 1) ? &ch1 : &ch2;
-    int16_t y = calcolaYTraccia(trig_ch, level12, true); 
-    
-    const uint16_t RIGHT_EDGE = MARGIN_X + TRACE_W - 1;
-
-    // --- Definizione vertici con struttura Point_t ---
-    // Punta verso l'interno (sinistra)
-    Point_t a = { RIGHT_EDGE,     y - 5 }; // Angolo alto sulla base
-    Point_t b = { RIGHT_EDGE,     y + 5 }; // Angolo basso sulla base
-    Point_t c = { RIGHT_EDGE - 7, y     }; // Punta (7 pixel verso sinistra)
-
-    // --- 1. CANCELLAZIONE ---
-    // Usiamo le vecchie coordinate memorizzate (old_a, old_b, old_c)
-    if (last_trig_y != -100) {
-        tft_drawFastHLine(MARGIN_X, last_trig_y, TRACE_W, BLACK);
-        tft_FillTriangle(old_trig_a, old_trig_b, old_trig_c, BLACK);
-    }
-
-    if (!erase) {
-        // --- 2. DISEGNO E CLIPPING ---
-        if (y > MARGIN_Y && y < (MARGIN_Y + TRACE_H)) {
-            
-            // Disegno linea tratteggiata
-            for (uint16_t x = MARGIN_X; x < RIGHT_EDGE - 8; x += 10) {
-                tft_drawFastHLine(x, y, 5, color); 
-            }
-
-            // --- 3. DISEGNO TRIANGOLO ---
-            tft_FillTriangle(a, b, c, color);
-
-            // Memorizziamo per il prossimo ciclo
-            old_trig_a = a;
-            old_trig_b = b;
-            old_trig_c = c;
-            last_trig_y = y; 
-        } else {
-            last_trig_y = -100; 
-        }
-    }
-}
-
-ui_status_t get_system_status_code(void) {
-    if (!is_running) {
-        return UI_STATUS_STOP;
-    }
-
-    uint8_t status = REG_TRIG;
-    bool fsm_ready = (status & (1 << READY_BIT));
-
-    if (trigger_mode == TRIG_MODE_SINGLE) {
-        return freeze ? UI_STATUS_STOP : UI_STATUS_WAIT;
-    } 
-    
-    if (trigger_mode == TRIG_MODE_NORMAL) {
-        return fsm_ready ? UI_STATUS_TRIGD : UI_STATUS_WAIT;
-    }
-
-    // Default per AUTO
-    return UI_STATUS_RUN;
-}
-
-void draw_channel_status(Channel *ch, uint16_t xPos, uint16_t yPos, bool force) {
-    // Controllo se qualcosa è cambiato o se è richiesto il refresh forzato
-    if(ch->old_vdiv_idx != ch->vdiv_idx || 
-       ch->old_coupling != ch->coupling || 
-       ch->old_volts_div != ch->volts_div ||
-       ch->old_multiplier != ch->multiplier || // Nuovo controllo per il Fine
-       force) {
-        ch->old_volts_div = ch->volts_div; // Aggiorniamo anche questo per il controllo Fine/Coarse
-        ch->old_multiplier = ch->multiplier; // Aggiorniamo anche questo per il controllo Probe
-        // Pulizia area (100px larghezza, 16px altezza)
-        tft_fillRect(xPos, yPos, 120, 16, BLACK);
-        
-        // Colore del canale (Giallo per CH1, Ciano per CH2)
-        setTextColor(ch->color, BLACK);
-        tft_set_cursor(xPos, yPos);
-        
-        // Stampa Etichetta (CH1 o CH2 basandosi sull'indirizzo di memoria)
-        tft_Print(ch == &ch1 ? "CH1: " : "CH2: ");
-        
-        // --- LOGICA DI STAMPA VOLTAGGIO ---
-
-        float vdiv = ch->volts_div * ch->multiplier; // Applichiamo il moltiplicatore della sonda al valore di V/div
-        
-        if (vdiv < 1.0f) {
-            // Sotto l'unità, meglio mostrare i mV come intero
-            tft_Print_int16((int16_t)(vdiv * 1000));
-            tft_Print("mV");
-        } else {
-            // Sopra l'unità, usiamo il float con 2 decimali
-            tft_print_float(vdiv, 2); 
-            tft_Print("V");
-        }
-        
-        tft_Print(" ");
-        
-        // Stampa Accoppiamento
-        // Usiamo un controllo semplice o l'array delle labels
-        tft_Print(ch->coupling == COUPL_AC ? "AC" : 
-                  ch->coupling == COUPL_GND ? "GND" : "DC");
-
-        // Aggiorniamo i vecchi valori
-        ch->old_vdiv_idx = ch->vdiv_idx;
-        ch->old_coupling = ch->coupling;
-    }
-}
-
-void update_status_bar(bool force) {
-    uint16_t yPos = MARGIN_Y + TRACE_H + 10;
-    uint16_t xStart = MARGIN_X;
-    setTextSize(1);
-    tft_printAt("Mje", 10, 5, GREEN, DARKGREY, 2);
-    static ui_status_t last_ui_state = 0xFF; // Valore impossibile per forzare il primo disegno
-    ui_status_t current_state = get_system_status_code();
-    if (force || current_state != last_ui_state) {
-        // Solo quando lo stato CAMBIA davvero, facciamo il lavoro pesante
-        char* label;
-        uint16_t color;
-
-        switch (current_state) {
-            case UI_STATUS_STOP:  label = "STOP  ";   color = RED;    break;
-            case UI_STATUS_WAIT:  label = "WAIT  ";   color = YELLOW; break;
-            case UI_STATUS_TRIGD: label = "TRIG'D"; color = GREEN;  break;
-            case UI_STATUS_RUN:   label = "RUN   ";    color = GREEN;  break;
-            default:              label = "???";    color = WHITE;  break;
-        }
-
-        // Qui disegni sul TFT (avviene solo una volta per ogni cambio di stato)
-        // tft_draw_status(label, color); 
-        tft_printAt(label, 100, 5, color, DARKGREY, 2);
-        last_ui_state = current_state;
-    }
-
-    // Aggiorna info CH1
-    draw_channel_status(&ch1, xStart, yPos, force);
-
-    // Aggiorna info CH2 (spostato di 100 pixel a destra)
-    draw_channel_status(&ch2, xStart + 120, yPos, force);
-
-    
-
-    if (misure->active) {
-    // 1. Gestione BACKGROUND (solo se cambia il menu, la sorgente o se forzato)
-    if (old_meas_active != misure->active || old_meas_type != misure->type || 
-        old_meas_source != misure->source || force) {
-        
-        old_meas_active = misure->active;
-        old_meas_type = misure->type;
-        old_meas_source = misure->source;
-
-        // Pulisci l'intera riga delle misure una volta sola
-        tft_fillRect(xStart, yPos + 20, 240, 16, BLACK); 
-    }
-
-    // 2. AGGIORNAMENTO DATI (Sempre, finché active è true)
-    switch (misure->source) {
-        case 1: // CH A
-            tft_set_cursor(xStart, yPos + 20);
-            setTextColor(ch1.color, BLACK); 
-
-            if (misure->type == 0) {
-                tft_print_float(misure->vpp, 1); 
-                tft_Print("Vpp ");
-            }
-            else if (misure->type == 1) {
-                tft_print_float(misure->vavg, 2); 
-                tft_Print("Vavg");
-            }
-            else if (misure->type == 2) {
-                tft_print_float(misure->vrms, 2); 
-                tft_Print("Vrms");
-            }
-            break;
-
-        case 2: // CH B
-            tft_set_cursor(xStart + 120, yPos + 20);
-            setTextColor(ch2.color, BLACK); 
-
-            if (misure->type == 0) {
-                tft_print_float(misure->vpp, 2); 
-                tft_Print("Vpp ");
-            }
-            else if (misure->type == 1) {
-                tft_print_float(misure->vavg, 2); 
-                tft_Print("Vavg");
-            }
-            else if (misure->type == 2) {
-                tft_print_float(misure->vrms, 2); 
-                tft_Print("Vrms");
-            }
-            break;
-    }
-} 
-else {
-    // 3. LOGICA DI CANCELLAZIONE ALLA DISATTIVAZIONE
-    // Se lo stato è appena passato da attivo a non attivo
-    if (old_meas_active != 0) {
-        // Cancella l'area delle misure (sia CH A che CH B)
-        tft_fillRect(xStart, yPos + 20, 240, 16, BLACK);
-        
-        // Aggiorna lo stato precedente così non cancella più al prossimo ciclo
-        old_meas_active = 0;
-    }
-}
-    
-
-    // --- BASE TEMPI ---
-    if(old_current_time_base_idx != current_time_base_idx || force){
-        tft_fillRect(xStart + 230, yPos, 100, 16, BLACK);
-        setTextColor(WHITE, BLACK);
-        tft_set_cursor(xStart + 230, yPos);
-        tft_Print("T: ");
-        tft_Print(time_base_labels[current_time_base_idx]);
-        old_current_time_base_idx = current_time_base_idx;
-    tft_Print("/div");
-    }
-
-
-   if(old_trigger_level_12bit != trigger_level_12bit || force){
-    tft_fillRect(xStart + 330, yPos, 100, 16, BLACK);
-    setTextColor(GREEN, BLACK);
-    tft_set_cursor(xStart + 330, yPos);
-    tft_Print("Trig: ");
-
-    // 1. Calcolo del livello relativo allo zero dell'ADC (es. 2048)
-    // Sostituisci 'ch1.zero_adc' con la variabile che usi per lo zero del canale sorgente
-    int32_t relative_level = 2048 -(int32_t)trigger_level_12bit; 
-
-    // 2. Calcolo in millivolt usando il riferimento reale a 5V (5000mV)
-    // Usiamo uint32_t per evitare overflow durante la moltiplicazione
-    int32_t level_mv = (relative_level * 5000L) / 4096;
-
-    // 3. Stampa con segno (per vedere +0.50V o -0.20V)
-    if(level_mv >= 0) tft_Print("+");
-    // Se level_mv è negativo, tft_print_float di solito gestisce già il segno meno
-    
-    tft_print_float(level_mv / 1000.0, 2);
-    tft_Print("V");
-
-    old_trigger_level_12bit = trigger_level_12bit;
-}
-    // Supponiamo di aver calcolato 'freq'
-    if(misure->f_active == 1) {
-    float freq = read_fpga_frequency();
-    
-    // Aggiorniamo a video solo se la frequenza cambia o se abbiamo appena attivato la misura
-    if(old_freq != freq || old_f_active == 0) {
-        tft_set_cursor(MARGIN_X + 230, yPos + 20); 
-        setTextColor(WHITE, BLACK);
-        tft_fillRect(MARGIN_X + 230, yPos + 20, 120, 16, BLACK);
-        // Pulizia locale prima di scrivere il nuovo valore (opzionale se tft_Print sovrascrive bene)
-        // tft_fillRect(MARGIN_X + 230, yPos + 20, 80, 10, BLACK); 
-
-        tft_Print("F:");
-        if (freq > 1000000) {
-            tft_print_float(freq / 1000000.0, 2);
-            tft_Print(" MHz");
-        } else if (freq > 1000) {
-            tft_print_float(freq / 1000.0, 1);
-            tft_Print(" kHz");
-        } else {
-            tft_print_float(freq, 1);
-            tft_Print(" Hz "); // Spazio finale per pulire eventuali residui di cifre precedenti
-        }
-        
-        old_freq = freq;
-        old_f_active = 1; // Ricordiamo che era attivo
-    }
-} 
-else {
-    // --- LOGICA DI CANCELLAZIONE ---
-    // Se prima era attivo e ora è 0, cancelliamo la scritta una volta sola
-    if(old_f_active == 1) {
-        // Regola le coordinate e le dimensioni in base a dove appare la scritta
-        tft_fillRect(MARGIN_X + 230, yPos + 20, 90, 20, BLACK); 
-        old_f_active = 0;
-        old_freq = -1.0; // Reset della frequenza per forzare il refresh alla prossima riaccensione
-    }
-}
-}
-
-
-                                                                           
-
-void write_encoder(uint8_t encoder_idx, int16_t value) {
-    switch (encoder_idx) {
-        case 0: // Encoder 0 controlla la posizione verticale di CH1
-            /*configure_encoder(0, PARAM_MIN, OFFSET_Y_MIN);
-            configure_encoder(0, PARAM_MAX, OFFSET_Y_MAX);
-            configure_encoder(0, PARAM_STEP, OFFSET_Y_STEP);
-            configure_encoder(0, PARAM_C_VAL, value);*/
-            setup_encoder(0, value, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP);
-            break;
-        case 1: // Encoder 1 Volt/Div CH1
-            /*configure_encoder(1, PARAM_MIN, VDIVCH_MIN);
-            configure_encoder(1, PARAM_MAX, VDIVCH_MAX);
-            configure_encoder(1, PARAM_STEP, VDIVCH_STEP);
-            configure_encoder(1, PARAM_C_VAL, value);*/
-            setup_encoder(1, value, VDIVCH_MIN, VDIVCH_MAX, VDIVCH_STEP);
-            break;    
-        case 2: // Encoder 2 controlla la posizione verticale di CH2
-            /*configure_encoder(2, PARAM_MIN, OFFSET_Y_MIN);
-            configure_encoder(2, PARAM_MAX, OFFSET_Y_MAX);
-            configure_encoder(2, PARAM_STEP, OFFSET_Y_STEP);
-            configure_encoder(2, PARAM_C_VAL, value);*/
-            setup_encoder(2, value, OFFSET_Y_MIN, OFFSET_Y_MAX, OFFSET_Y_STEP); 
-            break;
-        case 3: // Encoder 1 Volt/Div CH1
-            /*configure_encoder(3, PARAM_MIN, VDIVCH_MIN);
-            configure_encoder(3, PARAM_MAX, VDIVCH_MAX);
-            configure_encoder(3, PARAM_STEP, VDIVCH_STEP);
-            configure_encoder(3, PARAM_C_VAL, value);*/
-            setup_encoder(3, value, VDIVCH_MIN, VDIVCH_MAX, VDIVCH_STEP);
-            break;        
-        case 4: // Encoder 4 controlla la base dei tempi
-            /*configure_encoder(4, PARAM_MIN, TDIV_MIN);
-            configure_encoder(4, PARAM_MAX, TDIV_MAX);
-            configure_encoder(4, PARAM_STEP, TDIV_STEP);
-            configure_encoder(4, PARAM_C_VAL, value);*/
-            setup_encoder(4, value, TDIV_MIN, TDIV_MAX, TDIV_STEP);
-            break;
-        case 5: // Encoder 5 controlla il livello di trigger
-            /*configure_encoder(5, PARAM_MIN, TRIG_MIN);
-            configure_encoder(5, PARAM_MAX, TRIG_MAX);
-            configure_encoder(5, PARAM_STEP, TRIG_STEP);
-            configure_encoder(5, PARAM_C_VAL, value);*/
-            setup_encoder(5, value, TRIG_MIN, TRIG_MAX, TRIG_STEP);
-            break;
-        case 6: // Encoder 6 controlla il Pan
-            /*configure_encoder(6, PARAM_MIN, -PAN_LIMIT);
-            configure_encoder(6, PARAM_MAX, PAN_LIMIT);
-            configure_encoder(6, PARAM_STEP, PAN_STEP);
-            configure_encoder(6, PARAM_C_VAL, value);*/
-            setup_encoder(6, value, -PAN_LIMIT, PAN_LIMIT, PAN_STEP);
-            break;
-        default:
-            
-            break;
-    }
-}
-
-
-void conf_encoder() {
-    // Encoder 0: Posizione traccia CH1
-    write_encoder(0, OFFSET_Y1_C_VAL); // Impostiamo il valore iniziale
-
-    // Encoder 1: Volt/Div CH1
-    write_encoder(1, VDIVCH_C_VAL); // Impostiamo il valore iniziale
-
-    // Encoder 2: Posizione traccia CH2
-    write_encoder(2, OFFSET_Y2_C_VAL); // Impostiamo il valore iniziale
-
-
-    // Encoder 3: Volt/Div CH2
-    write_encoder(3, VDIVCH_C_VAL); // Impostiamo il valore iniziale
-
-    // Encoder 4: T/Div 
-    write_encoder(4, TDIV_C_VAL); // Impostiamo il valore iniziale
-
-    // Encoder 5: Trigger Level
-    write_encoder(5, TRIG_C_VAL); // Impostiamo il valore iniziale
-
-}
-
-
+/***************************************************************************************
+** Function name:           handle_channel_button
+** Description:             Gestisce la logica di accensione, spegnimento e focus dei
+** canali (CH1/CH2). Include la pulizia dei residui grafici alla disattivazione.
+***************************************************************************************/
 void handle_channel_button(uint8_t channel_num) {
     Channel *current = (channel_num == 1) ? &ch1 : &ch2;
     Channel *other   = (channel_num == 1) ? &ch2 : &ch1;
-    uint8_t menu = (channel_num == 1) ? MENU_CH1 : MENU_CH2;
-    // ch: 1 per CH1, 2 per CH2
+    uint8_t menu_target = (channel_num == 1) ? MENU_CH1 : MENU_CH2;
     uint8_t idx = channel_num - 1;
 
+    // CASO A: Canale spento -> Accendi e vai al suo menu
     if (!current->enabled) {
-        // CASO 1: Canale spento -> Accendi e dai focus
         current->enabled = 1;
         current->focused = 1;
         other->focused = 0;
-        currentMenu = menu;
-
-        
+        currentMenu = menu_target;
     } 
-    else if (current->enabled && !current->focused) {
-        // CASO 2: Acceso ma non a fuoco -> Sposta il focus qui
+    // CASO B: Acceso ma non ha il focus OPPURE ha il focus ma il menu è un altro (es. CURSOR)
+    else if (!current->focused || currentMenu != menu_target) {
         current->focused = 1;
         other->focused = 0;
-        currentMenu = menu;
-
+        currentMenu = menu_target;
     } 
+    // CASO C: Già acceso, già focused e siamo già nel suo menu -> Spegni il canale
     else {
-        // CASO 3: Già a fuoco e acceso -> Spegni tutto
         current->enabled = 0;
         current->focused = 0;
-        // 2. Se stiamo spegnendo il canale, puliamo lo schermo dai "fantasmi"
-
-    for (uint16_t i = 0; i < 400; i++) {
-        // Calcoliamo la X aggiungendo il margine (5)
-        // Cancelliamo il pixel usando la Y memorizzata nel buffer vecchio
-        tft_drawPixel(i + MARGIN_X, buffers_vecchi[idx][i], BLACK);
+        
+        // Pulizia tracce "fantasmi"
+        for (uint16_t i = 0; i < 400; i++) {
+            tft_drawPixel(i + MARGIN_X, buffers_vecchi[idx][i], BLACK);
+        }
+        
+        // Opzionale: se spegni il canale, torna al menu principale
+        currentMenu = MENU_NONE;
     }
     
-        //close_menu();
-    }
-    
-    // Forza il ridisegno dell'interfaccia grafica
     updateSidebarLabels();
 }
 
+/***************************************************************************************
+** Function name:           init_channels
+** Description:             Inizializza le strutture dati di entrambi i canali con i
+** parametri di default (scala, offset, accoppiamento e colori).
+***************************************************************************************/
 void init_channels() {
     // CH1 Default
     ch1.enabled = 1;
@@ -1768,6 +455,11 @@ void init_channels() {
     ch2.multiplier = 1.0f; // Moltiplicatore sonda iniziale (1X)
 }
 
+/***************************************************************************************
+** Function name:           updateChannelVoltDiv
+** Description:             Aggiorna la scala di ampiezza (Volt/div) del canale in modalità
+** Coarse o Fine e adegua la sensibilità dell'encoder del trigger.
+***************************************************************************************/
 void updateChannelVoltDiv(Channel *ch, int16_t current_enc, int16_t *last_enc) {
     if (current_enc != *last_enc) {
         /*uart_print("Encoder CH");
@@ -1796,377 +488,12 @@ void updateChannelVoltDiv(Channel *ch, int16_t current_enc, int16_t *last_enc) {
     }
 }
 
-void scope_set_hysteresis(uint8_t value) {
-    // Valore tipico: 10-50. 
-    // Se il segnale è sporco, alza questo valore.
-    XRAM_WRITE(REG_TRIG_HYST, value);
-}
-
-// Routine per calcolare lo step dinamico del trigger
-// ch->volts_div: valore assoluto (0-4096) che rappresenta il range -5V/+5V
-uint16_t calcola_step_trigger(float current_vdiv) {
-    
-    // Gestione scale millivolt (0.01V - 0.05V)
-    if (current_vdiv <= 0.021f) return 1;   // 10mV e 20mV: precisione massima
-    if (current_vdiv <= 0.051f) return 4;   // 50mV: 1 scatto ~ 2.5 pixel
-    
-    // Gestione scale medie (100mV - 500mV)
-    if (current_vdiv <= 0.11f)  return 8;   // 100mV
-    if (current_vdiv <= 0.21f)  return 16;  // 200mV
-    if (current_vdiv <= 0.51f)  return 40;  // 500mV
-    
-    // Gestione scale alte (1V - 10V)
-    if (current_vdiv <= 1.1f)   return 80;  // 1V
-    if (current_vdiv <= 2.1f)   return 160; // 2V
-    if (current_vdiv <= 5.1f)   return 400; // 5V
-    
-    return 800; // Default per 10V
-}
-//*************** AUTOSET *************************/
-void init_timer_polling() {
-// 1. Modalità Normale (Normal Mode)
-    // Su ATmega128, mettendo TCCR0 a 0 si imposta la modalità normale 
-    // e si scollegano i pin OC0 (no PWM).
-    TCCR0 = 0; 
-
-    // 2. Reset del contatore (8 bit: 0-255)
-    TCNT0 = 0;
-
-    // 3. Pulizia flag di overflow nel registro TIFR generico
-    // Si scrive 1 sul bit TOV0 per resettarlo.
-    TIFR |= (1 << TOV0);
-
-    // 4. Impostazione Prescaler e avvio
-    // A 60 MHz, per non far scappare il timer troppo velocemente,
-    // usiamo il prescaler 256. 
-    // Bit CS02=1, CS01=1, CS00=0 (secondo datasheet ATmega128)
-    TCCR0 = (1 << CS02) | (1 << CS01);
-}
-
-uint8_t cerca_indice_timebase(float periodo) {
-    // Se vogliamo vedere 4 cicli su 10 divisioni:
-    // 1 divisione deve essere = (4 * periodo) / 10 = periodo * 0.4
-    float t_div_ideale = periodo * 0.4f; 
-
-    for (uint8_t i = 0; i < 21; i++) {
-        // Appena troviamo una scala che è >= al nostro ideale, la prendiamo.
-        // Essendo l'ideale basato su 4 cicli, anche se scegliamo quella 
-        // immediatamente superiore, vedremo comunque tra 2 e 4 cicli.
-        if (timebase_seconds[i] >= t_div_ideale) {
-            return i;
-        }
-    }
-    return 20; 
-}
-
-uint8_t cerca_indice_vdiv(float v_div_target) {
-    // Scorriamo dal valore più sensibile (10mV) a quello più sordo (5V)
-    for (uint8_t i = 0; i < 20; i++) {
-        // Se il valore della tabella è maggiore o uguale a quello ideale,
-        // abbiamo trovato la scala che contiene il segnale senza tagliarlo.
-        if (v_div_values[i] >= v_div_target) {
-            return i;
-        }
-    }
-    return (20 - 1); // Default a 5V/div se il segnale è enorme
-}
-
-uint16_t get_vpp_raw_points(Channel *ch) {
-    uint16_t max_adc = 0;
-    uint16_t min_adc = 4095;
-    
-    // Puntiamo al buffer corretto in base al canale passato
-    uint16_t *buffer = (ch == &ch1) ? ch1_buffer : ch2_buffer;
-
-    // Analizziamo un numero sufficiente di campioni per beccare i picchi
-    // 400 punti sono perfetti per coprire l'intera BRAM
-    for (uint16_t i = 0; i < 400; i++) {
-        uint16_t val = buffer[i] & 0x0FFF; // Pulizia 12-bit sempre presente
-
-        if (val > max_adc) max_adc = val;
-        if (val < min_adc) min_adc = val;
-    }
-
-    // Se il segnale è piatto o c'è un errore di inizializzazione
-    if (max_adc <= min_adc) return 0;
-
-    return (max_adc - min_adc);
-}
-
-// Funzione di supporto per scalare il canale fino a riempire lo schermo
-void configura_verticale_smart(Channel *ch, int target_offset) {
-    ch->enabled = true;
-    ch->offset = target_offset;
-    
-    // 1. CATTURA UNICA (L'hardware è fisso, basta una "foto")
-    REG_TRIG = 0x01; 
-    uint16_t timeout = 0;
-    while (!(REG_TRIG & (1 << READY_BIT))) {
-        _delay_us(10);
-        if (++timeout > 5000) break;
-    }
-    osc_read_triggered();
-
-    // 2. CALCOLO VPP REALE IN VOLT
-    uint16_t v_max = 0;
-    uint16_t v_min = 4095;
-    uint16_t *buffer = (ch == &ch1) ? ch1_buffer : ch2_buffer;
-
-    for(int n=0; n<400; n++) {
-        uint16_t val = buffer[n] & 0x0FFF;
-        if(val > v_max) v_max = val;
-        if(val < v_min) v_min = val;
-    }
-
-    // Convertiamo i punti ADC in Volt (Delta totale)
-    // 4096 punti : 10V = vpp_punti : vpp_volt
-    float vpp_volt = ((float)(v_max - v_min) * 10.0f) / 4096.0f;
-
-    // 3. SCELTA DELLA SCALA (Software Zoom)
-    // Vogliamo che il segnale occupi circa 4 divisioni (4 * 30px = 120px)
-    // Formula: pixel = (vpp_volt / volts_div) * 30
-    // Quindi: volts_div = (vpp_volt * 30) / pixel_desiderati
-    float v_div_ideale = (vpp_volt * 30.0f) / 120.0f;
-
-    // Ora cerchiamo nella tua tabella dei VDIV l'indice che più si avvicina
-    // (o il primo valore più grande di v_div_ideale per non saturare visivamente)
-    ch->vdiv_idx = cerca_indice_vdiv(v_div_ideale);
-    
-    // Aggiorniamo il valore reale di volts_div nel canale
-    ch->volts_div = v_div_values[ch->vdiv_idx];
-    
-    // Sincronizziamo l'interfaccia
-    write_encoder((ch == &ch1) ? 1 : 3, ch->vdiv_idx);
-}
-
-bool check_presence(Channel *ch) {
-    // 1. Impostiamo la scala di "ascolto"
-    ch->vdiv_idx = V_DIV_500MV; 
-    write_encoder((ch == &ch1) ? 1 : 3, V_DIV_500MV); 
-    
-    // 2. FORZIAMO UNA CATTURA FRESCA
-    REG_TRIG = 0x01; // Arma l'FPGA
-
-    // Aspettiamo che il READY_BIT salga (il frame deve essere nuovo)
-    uint16_t timeout = 0;
-    while (!(REG_TRIG & (1 << READY_BIT))) {
-        _delay_us(50);
-        timeout++;
-        if (timeout > 2000) break; // 100ms timeout
-    }
-
-    // 3. LEGGIAMO i dati usando la tua funzione originale
-    // Questo aggiorna ch1_buffer o ch2_buffer con dati REALI a 500mV/div
-    osc_read_triggered();
-
-    // 4. Analisi del buffer aggiornato
-    uint16_t vpp_raw = get_vpp_raw_points(ch);
-
-    // Trasformiamo in Volt per decidere se c'è "vita"
-    // (Uso get_vpp_raw_points perché l'hai già scritta ed è veloce)
-    float lsb = (10.0f / 4096.0f) * ch->multiplier;
-    float vpp = (float)vpp_raw * lsb;
-
-    // Se vpp > 50mV, il canale è considerato attivo
-    return (vpp > 0.050f);
-}
-
-void draw_autoset_message() {
-    // Coordinate del box (ipotizzando uno schermo 320x240)
-    // Regola questi valori in base alla tua risoluzione reale
-    int16_t box_w = 140;
-    int16_t box_h = 40;
-    int16_t box_x = (400 - box_w) / 2; 
-    int16_t box_y = (240 - box_h) / 2;
-
-    // 1. Disegna il background del box (nero per coprire le tracce vecchie)
-    tft_fillRect(box_x + MARGIN_X, box_y + MARGIN_Y, box_w, box_h, BLACK);
-
-    // 2. Disegna la cornice (magari gialla o verde per dare l'idea di sistema attivo)
-    tft_drawRect(box_x + MARGIN_X, box_y + MARGIN_Y, box_w, box_h, YELLOW);
-    tft_drawRect(box_x + 2 + MARGIN_X, box_y + 2 + MARGIN_Y, box_w - 4, box_h - 4, YELLOW); // Doppia cornice pro
-
-    // 3. Scritta "AUTOSET" centrata
-    setTextSize(2); // Dimensione leggibile
-    //tft_printAt("AUTOSET", box_x + 25 + MARGIN_X, box_y + 12 + MARGIN_Y, WHITE, DARKGREY, 2);
-    tft_printCenteredX("AUTOSET", box_x + 2 + MARGIN_X, box_x + 2 + MARGIN_X + box_w - 4, box_y + 12 + MARGIN_Y, ORANGE, BLACK, 2);
-    
-    // Se la tua libreria lo richiede, forza l'invio al display
-    // tft.display(); 
-}
-
-void attesa_campionamento_ms(uint16_t ms) {
-    // 1. Assicuriamoci che il Timer0 usi il clock di sistema (60MHz) e non l'RTC
-    ASSR &= ~(1 << AS0); 
-
-    for (uint16_t i = 0; i < ms; i++) {
-        // 2. Prepariamo il timer
-        TCNT0 = (256 - 234); // Pre-carico per 1ms (60MHz/256 prescaler)
-        
-        // Reset flag overflow: nell'ATmega128 si scrive 1 su TOV0 in TIFR
-        TIFR |= (1 << TOV0); 
-
-        // 3. Avvio Timer con Prescaler 256
-        // Bit CS02=1, CS01=1, CS00=0 per ATmega128
-        TCCR0 = (1 << CS02) | (1 << CS01); 
-
-        // 4. Polling attivo
-        while (!(TIFR & (1 << TOV0))) {
-            osc_read_triggered();
-            read_fpga_frequency();
-            // Debug estremo: se non esce, stiamo leggendo il registro sbagliato
-        }
-
-        // 5. Fermiamo il timer
-        TCCR0 = 0; 
-    }
-}
-
-void routine_autoset_dual() {
-    draw_autoset_message(); // Mostriamo un messaggio chiaro all'utente durante l'autoset
-    conf_encoder(); // Assicuriamoci che gli encoder siano configurati correttamente prima di leggere i valori
-    // 1. Fase di Pre-analisi: Capire chi è vivo
-    // Impostiamo una scala cautelativa per il check (es. 1V/div)
-    current_time_base_idx = T_DIV_50US; 
-    set_base_time(T_DIV_50US);
-    write_encoder(4, T_DIV_50US);
-
-    // 1. Fase di Pre-analisi
-    ch1.vdiv_idx = V_DIV_1V; 
-    ch2.vdiv_idx = V_DIV_1V;
-    write_encoder(1, V_DIV_1V); 
-    write_encoder(3, V_DIV_1V); 
-    
-    trigger_source = 1;
-    trigger_mode = TRIG_MODE_AUTO; // Fondamentale per non bloccare l'FSM
-    set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
-    
-    trigger_level_12bit = 2048;
-    set_trigger_level(trigger_level_12bit);
-    write_encoder(5, TRIG_C_VAL); 
-
-    // --- RESET ACQUISIZIONE ---
-    // Diamo un colpo di reset alla FSM dell'FPGA per farla partire con i nuovi dati
-    //REG_TRIG = 0x00; 
-    _delay_ms(1000);
-    REG_TRIG = 0x01; 
-
-    _delay_ms(50);
-
-    bool signal_A = check_presence(&ch1);
-    bool signal_B = check_presence(&ch2);
-
-    // Se tutto è morto, torniamo a una visualizzazione standard
-    if (!signal_A && !signal_B) {
-        ch1.vdiv_idx = V_DIV_1V;
-        ch2.vdiv_idx = V_DIV_1V;
-        write_encoder(1, V_DIV_1V); // Aggiorna gli encoder per riflettere questa scelta
-        write_encoder(3, V_DIV_1V); // Aggiorna gli encoder per riflettere questa scelta
-        ch1.enabled = true;
-        ch2.enabled = false;
-        ch1.offset = OFFSET_Y1_C_VAL; // Centro schermo (assumendo 200px di altezza)
-        write_encoder(1, V_DIV_1V); // Aggiorna gli encoder per riflettere questa scelta
-        current_time_base_idx = T_DIV_10US;
-        write_encoder(4, T_DIV_10US); // Aggiorna l'encoder della base dei tempi
-        set_base_time(T_DIV_10US);
-
-        //REG_TRIG = 0x01;    // Armiamo la FSM FPGA
-
-        return;
-    }
-
-    // 2. Configurazione Verticale (Scale e Posizioni)
-    if (signal_A && signal_B) {
-        // Entrambi attivi: dividiamo lo schermo (Top e Bottom)
-        configura_verticale_smart(&ch1, 85); // Canale 1 in alto
-        configura_verticale_smart(&ch2, 205);  // Canale 2 in basso
-    } 
-    else if (signal_A) {
-        ch1.enabled = true;
-        ch2.enabled = false;
-        configura_verticale_smart(&ch1, 100); // Canale 1 al centro
-    }
-    else if (signal_B) {
-        ch1.enabled = false;
-        ch2.enabled = true;
-        configura_verticale_smart(&ch2, 100); // Canale 2 al centro
-    }
-
-    // 3. Configurazione Orizzontale (Base Tempi)
-
-    // Scegliamo la frequenza di riferimento per la base tempi
-    float freq_ref = 0;
-    /*if (signal_A) freq_ref = read_fpga_frequency_ch1(); // O la tua funzione freq
-    else freq_ref = read_fpga_frequency_ch2();*/
-    if(signal_A){ 
-        set_trigger_mode(trigger_mode, trigger_slope, 1); // Agganciamo il trigger al canale 
-        _delay_ms(100); // Tempo tecnico per stabilizzare la lettura dopo aver cambiato il trigger source
-        //freq_ref = read_fpga_frequency(); // O la tua funzione freq
-    }
-    else {
-        set_trigger_mode(trigger_mode, trigger_slope, 2); // Agganciamo il trigger al canale 
-        _delay_ms(100); // Tempo tecnico per stabilizzare la lettura dopo aver cambi
-        //freq_ref = read_fpga_frequency(); // O la tua funzione freq
-    }
-
-        // FORZIAMO UNA CATTURA FRESCA
-    REG_TRIG = 0x01; // Arma l'FPGA
-
-    // Aspettiamo che il READY_BIT salga (il frame deve essere nuovo)
-    uint16_t timeout = 0;
-    while (!(REG_TRIG & (1 << READY_BIT))) {
-        _delay_us(50);
-        timeout++;
-        if (timeout > 2000) break; // 100ms timeout
-    }
-
-    // 3. LEGGIAMO i dati usando la tua funzione originale
-    // Questo aggiorna ch1_buffer o ch2_buffer con dati REALI a 500mV/div
-    attesa_campionamento_ms(1000); // Attende 500ms campionando continuamente (e aggiornando i buffer) per avere dati freschi e stabili
-
-    freq_ref = read_fpga_frequency();
-
-
-    if (freq_ref > 0.5f) {
-        float periodo = 1.0f / freq_ref;
-        // Vogliamo vedere circa 3 cicli su 10 divisioni
-        float t_div_target = (3.0f * periodo) / 10.0f;
-        
-        // Cerchiamo l'indice che più si avvicina (funzione da definire sotto)
-        current_time_base_idx = cerca_indice_timebase(t_div_target);
-    } else {
-        current_time_base_idx = T_BASE_10MS; // Default se segnale lentissimo
-    }
-
-    // 4. Configurazione Trigger
-    // Agganciamo il trigger al canale principale trovato
-    trigger_level_12bit = 2048; // Centrato (0V)
-    if (signal_A) {
-        trigger_source = 1;
-    } else {
-        trigger_source = 2;
-    }
-
-    set_trigger_level(trigger_level_12bit);
-    write_encoder(5, TRIG_C_VAL); // Aggiorna l'encoder del trigger level
-    trigger_mode = 0; // Imposta in AUTO per sicurezza
-    trigger_slope = 0; // Rising edge
-    set_trigger_mode(TRIG_MODE_AUTO, TRIG_SLOPE_RISING, trigger_source);
-
-    // Alla fine di routine_autoset_dual()
-    set_base_time(current_time_base_idx); // Invia la nuova base tempi all'FPGA
-    write_encoder(4, current_time_base_idx);
-    REG_TRIG = 0x01; // Riautomatizza l'acquisizione
-    tft_fillRect(MARGIN_X, MARGIN_Y, 400, 240, BLACK); // Pulisce tutto lo schermo per rimuovere i fantasmi dell'autoset    
-
-}
-/*********************AUTOSET END *****************/
-
-
-
-
-
-// --- main loop ---
+/***************************************************************************************
+** Function name:           scope_main
+** Description:             Ciclo principale (Super-Loop) dell'applicativo. Gestisce la
+** schedulazione delle attività di acquisizione, polling degli
+** input e aggiornamento periodico della logica dei cursori.
+***************************************************************************************/
 void scope_main(void)
 {
     uint8_t key, rep;

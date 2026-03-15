@@ -18,7 +18,6 @@ int main(void) {
 
     uart_print("Inizializzo display...\r\n");
 
-    //debounce_init(0xFF);   // abilita tutti i 7 pulsanti
     keypad_init();
     leds_init();
  
@@ -36,8 +35,6 @@ int main(void) {
     tft_drawLine(276, 95, 286, 75, CYAN);
 
     tft_drawPixel(120, 200, WHITE);
-
-    //while(1);
 
     scope_main();
 

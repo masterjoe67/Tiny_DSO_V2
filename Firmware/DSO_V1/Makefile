@@ -15,6 +15,13 @@ SRCS = main.c \
 	   Peripheral/uart.c\
 	   Peripheral/leds.c\
 	   Peripheral/input.c\
+	   display_manager.c\
+	   fpga_manager.c\
+	   autoset_manager.c\
+	   encoder_manager.c\
+	   trace_manager.c\
+	   trigger_manager.c\
+	   cursor_manager.c\
 	   scope.c
 #glcdfont.c
 #scope.c
