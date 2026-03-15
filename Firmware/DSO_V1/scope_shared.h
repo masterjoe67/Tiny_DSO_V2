@@ -76,6 +76,7 @@
 #define MARGIN_Y 25
 #define SIDEBAR_X (MARGIN_X + TRACE_W + 5)
 #define CENTER_TRACE_X (MARGIN_X + (TRACE_W / 2))
+#define OFFSET_XY_AREA 85
 
 #define COUPL_DC  0
 #define COUPL_AC  1
@@ -90,6 +91,7 @@
 #define MENU_MEAS       4
 #define MENU_PAN        5
 #define MENU_CURSORS    6
+#define MENU_ORIZZONTAL 7
 
 // Valori di default per gli encoder (minimo, massimo step, valore iniziale)
 #define OFFSET_Y_MIN -50
@@ -121,6 +123,9 @@
 
 #define PRE_TRIGGER       200
 #define POST_TRIGGER      200
+
+#define Y_T  0
+#define X_Y  1
 
 // Parametri reticolo
 #define GRID_SPACING 30     // distanza tra linee
@@ -287,7 +292,8 @@ extern uint16_t *ch1_buffer;
 extern uint16_t *ch2_buffer;
 extern int16_t *old_buffer_a;
 extern int16_t *old_buffer_b;
-
+extern uint8_t is_xy_mode;
+extern uint8_t is_vectors;
 
 
 

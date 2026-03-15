@@ -30,12 +30,6 @@ int main(void) {
     setTextSize(1);
     setTextColor(WHITE, 0x0000);
 
-    tft_drawFastVLine(50, 50, 50, GREEN);
-    tft_drawFastHLine(100, 50, 100, RED);
-    tft_drawLine(276, 95, 286, 75, CYAN);
-
-    tft_drawPixel(120, 200, WHITE);
-
     scope_main();
 
     return 0;

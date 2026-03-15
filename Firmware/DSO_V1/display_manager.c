@@ -361,6 +361,11 @@ void updateSidebarLabels() {
             menuTitle = "CURSORS";
             menuColor = GREENYELLOW;
             break;
+
+        case MENU_ORIZZONTAL:
+            menuTitle = "ORIZZ.";
+            menuColor = PINK;
+            break;
             
         default:
             menuTitle = " MENU ";
@@ -461,6 +466,17 @@ void updateSidebarLabels() {
         }
         
     }
+    else if (currentMenu == MENU_ORIZZONTAL) {
+        // TASTO 0: Tipo di Cursore (OFF, VOLT, TIME)
+        
+        drawMenuButton(0, "Mode", is_xy_mode ? "X-Y" : "Y-T", true, WHITE);
+        drawMenuButton(1, "Trace", is_vectors ? "Vectors" : "Points", true, WHITE);
+        drawMenuButton(2, "", "", true, WHITE);
+        drawMenuButton(3, "", "", true, WHITE);
+        drawMenuButton(4, "", "", true, WHITE);
+        
+    }
+
     tft_drawFastHLine(415, TRACE_H + MARGIN_Y + 2, 58, WHITE);
     tft_drawFastHLine(415, TRACE_H + MARGIN_Y + TRACE_H + 2, 58, WHITE);
 }

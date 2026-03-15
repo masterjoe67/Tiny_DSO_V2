@@ -65,6 +65,10 @@ uint8_t old_f_active = 0;
 static int16_t last_enc1 = 0;           // Memoria posizione encoder 1
 static int16_t last_enc2 = 0;           // Memoria posizione encoder 2
 
+uint8_t is_xy_mode = Y_T;
+
+uint8_t is_vectors = 1;
+
 /* --- TABELLE DI LOOKUP (COSTANTI) --- */
 
 // Valori reali delle divisioni verticali (V/div)
@@ -163,16 +167,21 @@ void acquire_and_draw(){
         osc_read_triggered();
     }
 
-    tft_drawGrid(LIGHTGREY);
+    
 
-    draw_dual_trace_from_bram(&ch1, &ch2, old_buffer_a, old_buffer_b, 400, true);
-
-    // UI e Marker (Sempre visibili per poterli muovere in STOP)
-    draw_trigger_line(trigger_level_12bit, ORANGE, false);
-    draw_ground_marker(&ch1);
-    draw_ground_marker(&ch2);
-    drawPanTrack();
-    aggiorna_grafica_cursori();
+    if(!is_xy_mode){
+        tft_drawGrid(LIGHTGREY);
+        draw_dual_trace_from_bram(&ch1, &ch2, old_buffer_a, old_buffer_b, 400, is_vectors);
+        draw_trigger_line(trigger_level_12bit, ORANGE, false);
+        draw_ground_marker(&ch1);
+        draw_ground_marker(&ch2);
+        drawPanTrack();
+        aggiorna_grafica_cursori();
+    }else{
+        tft_drawGrid_XY(LIGHTGREY);
+        draw_xy_trace(&ch1, &ch2, old_buffer_a, old_buffer_b, 400);
+    }
+    
     
 }
 
@@ -489,6 +498,37 @@ void updateChannelVoltDiv(Channel *ch, int16_t current_enc, int16_t *last_enc) {
 }
 
 /***************************************************************************************
+** Function name:           set_display_mode
+** Description:             Cambia la modalità di visualizzazione (YT <-> XY).
+** Gestisce la transizione di stato resettando i buffer di 
+** cancellazione per evitare "fantasmi" grafici e riconfigura 
+** l'interfaccia per riflettere i nuovi assi.
+** Parameters:              mode: 0 per Y-T (Standard), 1 per X-Y
+***************************************************************************************/
+void set_display_mode(uint8_t mode) {
+    is_xy_mode = mode;
+
+    // Puliamo l'area traccia per evitare sovrapposizioni sporche
+    tft_fillRect(MARGIN_X, MARGIN_Y, TRACE_W, TRACE_H, BLACK);
+
+    // --- SETUP SPECIFICO ---
+    if (is_xy_mode) {
+        // --- SE ENTRIAMO IN MODALITÀ X-Y ---
+        ch1.enabled = true;
+        ch2.enabled = true;
+        
+
+
+    } else {
+        // --- SE TORNIAMO IN MODALITÀ Y-T (Standard) ---
+
+    }
+
+    // --- AGGIORNAMENTO INTERFACCIA ---
+    updateSidebarLabels();
+}
+
+/***************************************************************************************
 ** Function name:           scope_main
 ** Description:             Ciclo principale (Super-Loop) dell'applicativo. Gestisce la
 ** schedulazione delle attività di acquisizione, polling degli
@@ -498,12 +538,12 @@ void scope_main(void)
 {
     uint8_t key, rep;
     uint8_t new_sel;
-    //uint16_t new_trigger_level;
+
     init_timer_polling();
     init_channels();
     conf_encoder();
     drawStaticInterface();
-    //update_status_bar(true);
+   
     set_base_time(19);
 
     set_trigger_level(trigger_level_12bit);   
@@ -538,7 +578,7 @@ void scope_main(void)
             switch (ev)
             {
                 // --- TASTI FISICI DEDICATI (Master) ---
-                case 2: // Tasto AUTOSET
+                case KEY_AUTOSET: // Tasto AUTOSET
                     currentMenu = MENU_NONE; // Esci da eventuali menu per avere un'interfaccia pulita durante l'autoset
                     cursor_type = CUR_OFF; // Disattiva eventuali cursori attivi
                      routine_autoset_dual();
@@ -581,7 +621,7 @@ void scope_main(void)
                     currentMenu = MENU_TRIG;
                     updateSidebarLabels(); 
                     break;
-                case 01: // Ipotetico tasto fisico "Measure"
+                case KEY_MEASURE: // Ipotetico tasto fisico "Measure"
                     currentMenu = MENU_MEAS;
                     updateSidebarLabels(); 
                     break;
@@ -590,6 +630,10 @@ void scope_main(void)
                     break;
                 case KEY_CH2: // Tasto fisico "Vertical CH2"
                     handle_channel_button(2);
+                    break;
+                case KEY_ORIZZONTAL:
+                    currentMenu = MENU_ORIZZONTAL;
+                    updateSidebarLabels(); 
                     break;
                 case 15: // Tasto encoder per la posizione verticale (Y-POS)
                     write_encoder(0, OFFSET_Y1_C_VAL); // Reset posizione Y CH1 
@@ -774,6 +818,34 @@ void scope_main(void)
                             break;
                     }
                     break;
+                case MENU_ORIZZONTAL:
+                    switch (ev) {
+                        case 9: 
+                            is_vectors++;
+                            if (is_vectors > 1) {
+                                is_vectors = 0;
+                            }
+                            updateSidebarLabels(); 
+
+                            break;
+
+                        case 12:  // Tasto 2 
+                            set_display_mode(!is_xy_mode); // Inverte lo stato (0->1 o 1->0)
+                            updateSidebarLabels();
+                            break;
+                        case 6:  // Tasto 3 
+                            
+                            break;
+                        case 3:  // Tasto 4 
+                            
+                            break;
+
+                        case 0:  // Tasto 5 
+                            
+                            break;
+                    }
+                    break;
+
                 
             }
 

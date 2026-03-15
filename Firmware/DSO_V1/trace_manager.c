@@ -23,6 +23,48 @@ Point_t gnd_mark_b[2] = {{ 0, 0 }, { 0, 0 }};
 Point_t gnd_mark_c[2] = {{ 0, 0 }, { 0, 0 }};
 
 /***************************************************************************************
+** Function name:           calcola_XY_coordinata
+** Description:             Mappa i valori ADC per la modalità XY. 
+** is_x_axis = true  -> Mappa su larghezza (Area XY)
+** is_x_axis = false -> Mappa su altezza (come calcolaYTraccia)
+***************************************************************************************/
+int16_t calcola_XY_coordinata(Channel *ch, uint16_t valoreADC_12bit, bool is_x_axis) {
+    static const float RANGE_TOTALE = 10.0f; 
+    static const float ADC_RESOLUTION = 4096.0f;
+    static const float BITS_PER_VOLT = ADC_RESOLUTION / RANGE_TOTALE;
+    static const float ADC_ZERO = 2048.0f;
+    static const float PIXEL_PER_DIV = 30.0f;
+
+    // 1. Calcolo del delta (identico alla tua funzione)
+    float deltaADC = (float)valoreADC_12bit - ADC_ZERO;
+    float volt = deltaADC / BITS_PER_VOLT;
+    float pixelSpostamento = (volt / ch->volts_div) * PIXEL_PER_DIV;
+
+    if (is_x_axis) {
+        // --- ASSE X (Orizzontale) ---
+        // Prendiamo l'offset del canale (che Joe muove con l'encoder)
+        // e lo trasliamo dall'area verticale all'area orizzontale XY.
+        // Se ch->offset è 120 (centro verticale), deve diventare 325 (centro XY)
+        
+        int16_t offset_traslato_x = ch->offset + (205 - MARGIN_Y); 
+        
+        if (ch->inverted) {
+            return (int16_t)(offset_traslato_x - pixelSpostamento);
+        } else {
+            return (int16_t)(offset_traslato_x + pixelSpostamento);
+        }
+    } else {
+        // --- ASSE Y (Verticale) ---
+        // Usiamo esattamente la tua logica originale
+        if (ch->inverted) {
+            return (int16_t)(ch->offset - pixelSpostamento);
+        } else {
+            return (int16_t)(ch->offset + pixelSpostamento);
+        }
+    }
+}
+
+/***************************************************************************************
 ** Function name:           draw_trace
 ** Description:             Disegna e cancella la traccia usando la logica V/div
 ***************************************************************************************/
@@ -151,6 +193,59 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
     }
 }
 
+
+/***************************************************************************************
+** Function name:           draw_xy_trace
+** Description:             Rendering della traccia in modalità X-Y (Lissajous).
+** Utilizza il CH1 come asse X e il CH2 come asse Y. La funzione 
+** gestisce la cancellazione selettiva dei vecchi pixel tramite 
+** buffer di memoria per garantire fluidità senza flickering.
+** Parameters:              ch_x, ch_y: puntatori ai canali sorgente
+** old_x_buf, old_y_buf: buffer storici per la cancellazione
+** length: numero di campioni da processare
+***************************************************************************************/
+void draw_xy_trace(Channel *ch_x, Channel *ch_y, int16_t *old_x_buf, int16_t *old_y_buf, uint16_t length) 
+{
+    // Confini dell'area XY quadrata
+    const int16_t OFFSET_X = OFFSET_XY_AREA; 
+    const int16_t X_MIN = OFFSET_X;
+    const int16_t X_MAX = OFFSET_X + 240;
+    const int16_t Y_MIN = MARGIN_Y;
+    const int16_t Y_MAX = MARGIN_Y + 240;
+
+    for (uint16_t i = 0; i < length; i++) {
+        // --- 1. CANCELLAZIONE (Usa i buffer esistenti) ---
+        if (old_x_buf[i] != -100) {
+            tft_drawPixel(old_x_buf[i], old_y_buf[i], BLACK);
+        }
+
+        // --- 2. CALCOLO NUOVO PUNTO ---
+        if (ch_x->enabled && ch_y->enabled) {
+            
+            // Usiamo la TUA funzione calcolaYTraccia che funziona bene
+            // Per la Y è diretta:
+            int16_t raw_y = calcolaYTraccia(ch_y, ch2_buffer[i], false);
+            
+            // Per la X usiamo la stessa funzione, ma dobbiamo "spostarla"
+            // perché calcolaYTraccia restituisce una coordinata verticale (Y).
+            // Noi sottraiamo il suo margine verticale e aggiungiamo quello orizzontale XY.
+            int16_t raw_x = calcolaYTraccia(ch_x, ch1_buffer[i], false);
+            int16_t new_x = raw_x - MARGIN_Y + OFFSET_X;
+            int16_t new_y = raw_y;
+
+            // --- 3. DISEGNO E SALVATAGGIO ---
+            // Verifichiamo che il punto sia dentro il quadrato 240x240
+            if (new_x >= X_MIN && new_x < X_MAX && new_y >= Y_MIN && new_y < Y_MAX) {
+                tft_drawPixel(new_x, new_y, GREEN);
+                old_x_buf[i] = new_x;
+                old_y_buf[i] = new_y;
+            } else {
+                old_x_buf[i] = -100; // Segnaposto fuori schermo
+            }
+        }
+    }
+}
+
 /***************************************************************************************
 ** Function name:           calcolaYTraccia
 ** Description:             Converte il valore ADC in coordinata Y pixel basandosi
@@ -257,6 +352,58 @@ void tft_drawGrid(uint16_t color) {
         uint8_t step = (x == xCenter) ? 2 : dotSpacing;
 
         for (int16_t y = yStart; y <= yEnd; y += step) {
+            tft_drawPixel(x, y, color);
+        }
+    }
+}
+
+/***************************************************************************************
+** Function name:           tft_drawGrid_XY
+** Description:             Disegna la griglia specifica per la modalità X-Y.
+** Crea un quadrato 240x240 con croce centrale e divisioni puntinate.
+***************************************************************************************/
+void tft_drawGrid_XY(uint16_t color) {
+    const int16_t OFFSET_X = OFFSET_XY_AREA;
+    const int16_t SIZE = 240;
+    
+    int16_t xStart = OFFSET_X;
+    int16_t yStart = MARGIN_Y;
+    int16_t xEnd   = OFFSET_X + SIZE;
+    int16_t yEnd   = MARGIN_Y + SIZE;
+
+    // Spaziatura divisioni: 30 pixel (per avere 8 divisioni in 240px)
+    uint8_t spacing = 30; 
+    uint8_t dotSpacing = 6;
+
+    int16_t xCenter = xStart + (SIZE / 2);
+    int16_t yCenter = yStart + (SIZE / 2);
+
+    // 1. Cornice esterna del quadrato XY
+    tft_drawRect(xStart, yStart, SIZE, SIZE, color);
+
+    // 2. Assi Centrali (Croce Continua)
+    // Asse Orizzontale (X)
+    for (int16_t x = xStart; x <= xEnd; x += 2) {
+        tft_drawPixel(x, yCenter, color);
+    }
+    // Asse Verticale (Y)
+    for (int16_t y = yStart; y <= yEnd; y += 2) {
+        tft_drawPixel(xCenter, y, color);
+    }
+
+    // 3. Divisioni Interne (Puntinate)
+    // Linee Orizzontali puntinate
+    for (int16_t y = yStart + spacing; y < yEnd; y += spacing) {
+        if (y == yCenter) continue; // Salta l'asse già disegnato
+        for (int16_t x = xStart; x <= xEnd; x += dotSpacing) {
+            tft_drawPixel(x, y, color);
+        }
+    }
+
+    // Linee Verticali puntinate
+    for (int16_t x = xStart + spacing; x < xEnd; x += spacing) {
+        if (x == xCenter) continue; // Salta l'asse già disegnato
+        for (int16_t y = yStart; y <= yEnd; y += dotSpacing) {
             tft_drawPixel(x, y, color);
         }
     }
