@@ -6,6 +6,7 @@
 #include "Peripheral/st7798.h"
 #include "Peripheral/input.h"
 #include "Peripheral/uart.h"
+#include "Peripheral/leds.h"
 #include "scope.h"
 #include "scope_shared.h"
 #include "display_manager.h"
@@ -538,11 +539,18 @@ void scope_main(void)
 {
     uint8_t key, rep;
     uint8_t new_sel;
+    // Piccolo check dei LED (POST - Power On Self Test)
+LED_SetCH(1, 1);
+_delay_ms(100);
+LED_SetCH(2, 1);
+_delay_ms(100);
+LED_SetRunStop(LED_YELLOW);
 
+    drawStaticInterface();
     init_timer_polling();
     init_channels();
     conf_encoder();
-    drawStaticInterface();
+    
    
     set_base_time(19);
 
@@ -559,13 +567,16 @@ void scope_main(void)
 
     scope_set_hysteresis(20); // Imposta un valore di default per l'isteresi
     update_status_bar(true);
+    _delay_ms(500);
+    LED_SetCH(1, 0);
+    LED_SetCH(2, 0);
+    LED_SetRunStop(LED_GREEN); 
 
    while(1)
     {
         pan_flag = false;
         uint8_t ev = 0xff;
         if (keypad_poll(&key, &rep)) {
-            //ui_handle_key(key, rep);
             ev = key;
 
         } else {
@@ -786,7 +797,12 @@ void scope_main(void)
                             cursor_type++;
                             if (cursor_type > CUR_TIME) {
                                 cursor_type = CUR_OFF;
-                            }
+                                LED_SetCH(1, 0);
+                                LED_SetCH(2, 0);
+                            } else {
+                                LED_SetCH(1, 1);
+                                LED_SetCH(2, 1);
+                            } 
                             if (cursor_type == CUR_VOLT) {
                                 // Configura Encoder 1 per Cursore A (Verticale: 0-240)
                                 setup_encoder(0, cursor_v_a, MARGIN_Y, MARGIN_Y + 239, 1); 

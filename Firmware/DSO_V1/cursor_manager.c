@@ -41,33 +41,36 @@ void format_val_unit(char* dest, float val, uint8_t mode, const char* unit) {
     float abs_v = (val < 0) ? -val : val;
     char* p = dest;
 
-    if (mode == 0) { // Logica per Volt o Tempo (sotto-unità)
+    if (mode == 0) { // Volt o Tempo
         if (val < 0) *p++ = '-';
         else if (val > 0) *p++ = '+';
 
-        if (abs_v < 1e-6f) { // nano
+        if (abs_v == 0) {
+            p = append_str(p, "0.00");
+        } else if (abs_v < 1e-6f) { // nano
             dtostrf(abs_v * 1e9f, 1, 0, n_buf);
             p = append_str(p, n_buf); p = append_str(p, "n");
-        } else if (abs_v < 0.001f) { // micro
+        } else if (abs_v < 0.0009995f) { // micro (soglia leggermente sotto 1ms per arrotondamento)
             dtostrf(abs_v * 1e6f, 1, 2, n_buf);
             p = append_str(p, n_buf); p = append_str(p, "u");
-        } else if (abs_v < 1.0f && abs_v > 0) { // milli
+        } else if (abs_v < 0.9995f) { // milli
             dtostrf(abs_v * 1e3f, 1, 2, n_buf);
             p = append_str(p, n_buf); p = append_str(p, "m");
         } else { // Unità base
             dtostrf(abs_v, 1, 2, n_buf);
-            p = append_str(p, n_buf); p = append_str(p, "");
+            p = append_str(p, n_buf);
         }
-    } else { // Logica per Frequenza (sovra-unità)
-        if (abs_v >= 1e6f) {
+    } else { // Frequenza
+        // ... (La logica K e M è corretta perché usa >=)
+        if (abs_v >= 999500.0f) { // Mega
             dtostrf(abs_v / 1e6f, 1, 1, n_buf);
             p = append_str(p, n_buf); p = append_str(p, "M");
-        } else if (abs_v >= 1e3f) {
+        } else if (abs_v >= 999.5f) { // Kilo
             dtostrf(abs_v / 1e3f, 1, 1, n_buf);
             p = append_str(p, n_buf); p = append_str(p, "K");
         } else {
             dtostrf(abs_v, 1, 1, n_buf);
-            p = append_str(p, n_buf); p = append_str(p, "");
+            p = append_str(p, n_buf);
         }
     }
     append_str(p, unit);

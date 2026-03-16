@@ -1,9 +1,20 @@
---************************************************************************************************
--- Top entity for AVR microcontroller (for synthesis) with JTAG OCD and DMAs
--- Version 0.5 (Version for Xilinx)
--- Designed by Ruslan Lepetenok 
--- Modified 31.05.2006
---************************************************************************************************
+----------------------------------------------------------------------------------
+-- Project:         Zoe DSO - AVR Soft Core
+-- Engineer:        Giovanni Legati M.J.E.
+-- 
+-- Description:     VHDL implementation of the AVR Soft Core architecture.
+--                  This module executes the main control logic for the Zoe 
+--                  oscilloscope, managing UI, triggers, and data processing.
+--
+-- Original Author: Ruslan Lepetenok
+-- Modified by:     Giovanni Legati M.J.E.
+--
+-- Revision:        16/03/2026
+--
+-- Changes:         Integrated dual-channel ADC clock management via 
+--                  ALTDDIO_OUT for jitter-free acquisition synchronized 
+--                  with the core instruction cycle.
+----------------------------------------------------------------------------------
 
 library IEEE;
 use IEEE.std_logic_1164.all;
@@ -30,7 +41,7 @@ entity top_avr_core_v8 is port(
 	-- UART 
 	rxd    : in    std_logic;
 	txd    : out   std_logic;
-	
+
 	-- TFT SPI
 	tft_sclk    	: out std_logic;
 	tft_mosi    	: out std_logic;
@@ -38,44 +49,32 @@ entity top_avr_core_v8 is port(
 	tft_dc      	: out std_logic;
 	tft_rst     	: out std_logic;
 	tft_backlight 	: out std_logic;
-	
+
 	-- External interrupts
 	INTx   : in    std_logic_vector(7 downto 0); 
 	INT0	 : in    std_logic;
 
-	-- JTAG related signals
-	TMS    : in    std_logic;
-	TCK	 : in    std_logic;
-	TDI    : in    std_logic;
-	TDO    : out   std_logic;
-	TRSTn  : in    std_logic; -- Optional JTAG input
-	
---   --ADC SPI
---   ADC_sclk	    	: out   std_logic;
---	ADC_cs_n			: out   std_logic;
---	ADC_miso		   : in    std_logic;
---	ADC_mosi  		: out std_logic;
-		  -- Interfaccia Modulo ADC Canale A
-        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
-        ACK         : out std_logic;                     -- Clock A
-        ORA         : in  std_logic;                     -- Out of Range A
-        
-        -- Interfaccia Modulo ADC Canale B
-        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
-        BCK         : out std_logic;                     -- Clock B
-        ORB         : in  std_logic;                     -- Out of Range B
-   
-	
+
+
+	-- Interfaccia Modulo ADC Canale A
+	DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+	ACK         : out std_logic;                     -- Clock A
+	ORA         : in  std_logic;                     -- Out of Range A
+
+	-- Interfaccia Modulo ADC Canale B
+	DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+	BCK         : out std_logic;                     -- Clock B
+	ORB         : in  std_logic;                     -- Out of Range B
+
+
 	--keys		: in    std_logic_vector(7 downto 0);
 	key_rows 		: in  std_logic_vector(4 downto 0); -- 5 INGRESSI (pull-up)
 	key_cols 		: out std_logic_vector(2 downto 0); -- 3 USCITE
-	
+
 	--Encoder
 	s_enc_a        : in  std_logic_vector(6 downto 0);
-   s_enc_b        : in  std_logic_vector(6 downto 0);
+	s_enc_b        : in  std_logic_vector(6 downto 0);
 	enc_keys_i     : in  std_logic_vector(3 downto 0) -- 4 TASTI DEGLI ENCODER
-	
-
 	);
 
 end top_avr_core_v8;
@@ -670,26 +669,26 @@ pm_adr <= core_pc;
 
 
 uart_Inst:component uart port map(
-	                -- AVR Control
-                    ireset     => core_ireset,
-                    cp2	       => core_cp2,
-                    adr        => core_adr,
-                    dbus_in    => core_dbusout,
-                    dbus_out   => uart_dbusout,
-                    iore       => core_iore,
-                    iowe       => core_iowe,
-                    out_en     => uart_out_en,
-                    -- UART
-                    rxd        => rxd,
-                    rx_en      => open,
-                    txd        => txd,
-                    tx_en      => open,
-                    -- IRQ
-                    txcirq     => core_irqlines(19),
-                    txc_irqack => ind_irq_ack(19),
-                    udreirq    => core_irqlines(18),
-			        rxcirq     => core_irqlines(17)
-		            );
+	-- AVR Control
+	ireset     => core_ireset,
+	cp2	       => core_cp2,
+	adr        => core_adr,
+	dbus_in    => core_dbusout,
+	dbus_out   => uart_dbusout,
+	iore       => core_iore,
+	iowe       => core_iowe,
+	out_en     => uart_out_en,
+	-- UART
+	rxd        => rxd,
+	rx_en      => open,
+	txd        => txd,
+	tx_en      => open,
+	-- IRQ
+	txcirq     => core_irqlines(19),
+	txc_irqack => ind_irq_ack(19),
+	udreirq    => core_irqlines(18),
+	rxcirq     => core_irqlines(17)
+	);
 
 
 -- UART connection to the external multiplexer							  
@@ -699,18 +698,18 @@ io_port_out_en(2) <= uart_out_en;
 
 -- Arbiter and mux
 ArbiterAndMux_Inst:component ArbiterAndMux port map(
-                        --Clock and reset
-						ireset      => core_ireset,
-						cp2         => core_cp2,
-					    -- Bus masters
-                        busmin		=> busmin,
-						busmwait	=> busmwait,
-						-- Memory Address,Data and Control
-						ramadr     => mem_ramadr,
-						ramdout    => mem_ram_dbus_in,
-                        ramre      => mem_ramre,
-                        ramwe      => mem_ramwe,
-						cpuwait    => slv_cpuwait
+	--Clock and reset
+	ireset      => core_ireset,
+	cp2         => core_cp2,
+	-- Bus masters
+	busmin		=> busmin,
+	busmwait	=> busmwait,
+	-- Memory Address,Data and Control
+	ramadr     => mem_ramadr,
+	ramdout    => mem_ram_dbus_in,
+	ramre      => mem_ramre,
+	ramwe      => mem_ramwe,
+	cpuwait    => slv_cpuwait
 						);
 
 -- cpuwait 
@@ -778,7 +777,7 @@ RAMAdrDcd_Inst:component RAMAdrDcd port map(
 scope_inst : entity work.oscilloscope_top 
     port map(
         clk     => core_cp2,
-		  clk_adc => clk_adc,
+	--	  clk_adc => clk_adc,
         rst_n   => core_ireset,
 
 --        -- ADC

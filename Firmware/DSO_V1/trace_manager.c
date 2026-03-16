@@ -71,7 +71,7 @@ int16_t calcola_XY_coordinata(Channel *ch, uint16_t valoreADC_12bit, bool is_x_a
 void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a, int16_t *old_buf_b, uint16_t length, bool vectors)
 {
     const int16_t Y_MIN = MARGIN_Y;
-    const int16_t Y_MAX = MARGIN_Y + TRACE_H;
+    const int16_t Y_MAX = MARGIN_Y + TRACE_H - 2;
 
     // --- 1. RESET VARIABILI MISURE (Locali, non static!) ---
     uint64_t sum_sq = 0; 
@@ -122,7 +122,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
         // 1. CANCELLAZIONE (Sempre, se il vecchio punto era valido)
         if (old_buf_a[i] > Y_MIN && old_buf_a[i] < Y_MAX) {
             if (vectors && i > 0 && y_prev_old_a > Y_MIN) 
-                tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX-1);
+                tft_drawLine_Clipped(x-1, y_prev_old_a, x, old_buf_a[i], BLACK, Y_MIN, Y_MAX);
             else 
                 tft_drawPixel(x, old_buf_a[i], BLACK);
         }
@@ -133,7 +133,7 @@ void draw_dual_trace_from_bram(Channel *ch_a, Channel *ch_b, int16_t *old_buf_a,
             int16_t y_now_a = calcolaYTraccia(ch_a, ch1_buffer[ram_idx], false);
             if (y_now_a > Y_MIN && y_now_a < Y_MAX) {
                 if (vectors && i > 0 && y_prev_new_a > Y_MIN) 
-                    tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX-1);
+                    tft_drawLine_Clipped(x-1, y_prev_new_a, x, y_now_a, ch_a->color, Y_MIN, Y_MAX);
                 else 
                     tft_drawPixel(x, y_now_a, ch_a->color);
             }

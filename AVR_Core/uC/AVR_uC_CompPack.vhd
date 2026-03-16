@@ -13,37 +13,37 @@ use WORK.AVRuCPackage.all;
 package AVR_uC_CompPack is
 
 component pport is generic(PPortNum : natural); 
-	               port(
-	                   -- AVR Control
-               ireset     : in std_logic;
-               cp2	      : in std_logic;
-               adr        : in std_logic_vector(6 downto 0);
-               dbus_in    : in std_logic_vector(7 downto 0);
-               dbus_out   : out std_logic_vector(7 downto 0);
-               iore       : in std_logic;
-               iowe       : in std_logic;
-               out_en     : out std_logic; 
-			            -- External connection
-			   portx      : out std_logic_vector(7 downto 0);
-			   ddrx       : out std_logic_vector(7 downto 0);
-			   pinx       : in  std_logic_vector(7 downto 0));
+	port(
+				 -- AVR Control
+		ireset     : in std_logic;
+		cp2	      : in std_logic;
+		adr        : in std_logic_vector(6 downto 0);
+		dbus_in    : in std_logic_vector(7 downto 0);
+		dbus_out   : out std_logic_vector(7 downto 0);
+		iore       : in std_logic;
+		iowe       : in std_logic;
+		out_en     : out std_logic; 
+				-- External connection
+		portx      : out std_logic_vector(7 downto 0);
+		ddrx       : out std_logic_vector(7 downto 0);
+		pinx       : in  std_logic_vector(7 downto 0));
 end component;
 
 component SmartEncoderBank is
     port (
-        clk          : in  std_logic;
-        rst_n        : in  std_logic;
-        -- Hardware Encoder (14 pin)
-        enc_a        : in  std_logic_vector(6 downto 0);
-        enc_b        : in  std_logic_vector(6 downto 0);
-        -- Bus Interfaccia
-        addr_in      : in  std_logic_vector(6 downto 0); 
-        data_in      : in  std_logic_vector(7 downto 0);
-        data_out     : out std_logic_vector(7 downto 0);
-        iowe         : in  std_logic;
-        iore         : in  std_logic;
-        out_en       : out std_logic  -- ABILITAZIONE BUS DATI
-    );
+		clk          : in  std_logic;
+		rst_n        : in  std_logic;
+		-- Hardware Encoder (14 pin)
+		enc_a        : in  std_logic_vector(6 downto 0);
+		enc_b        : in  std_logic_vector(6 downto 0);
+		-- Bus Interfaccia
+		addr_in      : in  std_logic_vector(6 downto 0); 
+		data_in      : in  std_logic_vector(7 downto 0);
+		data_out     : out std_logic_vector(7 downto 0);
+		iowe         : in  std_logic;
+		iore         : in  std_logic;
+		out_en       : out std_logic  -- ABILITAZIONE BUS DATI
+		);
 end component;
 
 
@@ -235,26 +235,26 @@ component ClockSwitch is port(
 end component;
 
 component uart is port(
-	                -- AVR Control
-                    ireset     : in  std_logic;
-                    cp2	       : in  std_logic;
-                    adr        : in  std_logic_vector(6 downto 0);
-                    dbus_in    : in  std_logic_vector(7 downto 0);
-                    dbus_out   : out std_logic_vector(7 downto 0);
-                    iore       : in  std_logic;
-                    iowe       : in  std_logic;
-                    out_en     : out std_logic; 
-                    -- UART
-                    rxd        : in  std_logic;
-                    rx_en      : out std_logic;
-                    txd        : out std_logic;
-                    tx_en      : out std_logic;
-                    -- IRQ
-                    txcirq     : out std_logic;
-                    txc_irqack : in  std_logic;
-                    udreirq    : out std_logic;
-			        rxcirq     : out std_logic
-		            );
+	-- AVR Control
+	ireset     : in  std_logic;
+	cp2	       : in  std_logic;
+	adr        : in  std_logic_vector(6 downto 0);
+	dbus_in    : in  std_logic_vector(7 downto 0);
+	dbus_out   : out std_logic_vector(7 downto 0);
+	iore       : in  std_logic;
+	iowe       : in  std_logic;
+	out_en     : out std_logic; 
+	-- UART
+	rxd        : in  std_logic;
+	rx_en      : out std_logic;
+	txd        : out std_logic;
+	tx_en      : out std_logic;
+	-- IRQ
+	txcirq     : out std_logic;
+	txc_irqack : in  std_logic;
+	udreirq    : out std_logic;
+	rxcirq     : out std_logic
+			);
 end component;
 
 component FrqDiv is port(
@@ -262,26 +262,6 @@ component FrqDiv is port(
 			          clk_out    : out std_logic
 		              );
 end component;
-
-
---component adc128s022_reader is
---    port (
---        clk     : in  std_logic;
---        rst_n   : in  std_logic;
---
---        -- SPI ADC
---        sclk    : out std_logic;
---        cs_n    : out std_logic;
---        mosi    : out std_logic;
---        miso    : in  std_logic;
---
---        -- Uscite dati
---        ch0   : out unsigned(11 downto 0);
---        ch1   : out unsigned(11 downto 0);
---        ch2   : out unsigned(11 downto 0)
---
---    );
---end component;
 
 component dual_ad9226_reader is
     port(
@@ -325,11 +305,6 @@ component oscilloscope_top is
         clk     : in  std_logic;
 		  clk_adc : in    std_logic;
         rst_n   : in  std_logic;
-
---        -- ADC
---        sclk    : out std_logic;
---        cs_n    : out std_logic;
---        miso    : in  std_logic;
 		  
 		  -- Interfaccia Modulo ADC Canale A
         DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12

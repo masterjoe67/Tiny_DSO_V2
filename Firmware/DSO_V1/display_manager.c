@@ -9,6 +9,7 @@
 #include "encoder_manager.h"
 #include "Peripheral/st7798.h" 
 #include "Peripheral/input.h"
+#include "Peripheral/leds.h"
 
 float old_freq = 0xFFFFFFFF;
 
@@ -69,12 +70,36 @@ void update_status_bar(bool force) {
         uint16_t color;
 
         switch (current_state) {
-            case UI_STATUS_STOP:  label = "STOP  ";   color = RED;    break;
-            case UI_STATUS_WAIT:  label = "WAIT  ";   color = YELLOW; break;
-            case UI_STATUS_TRIGD: label = "TRIG'D"; color = GREEN;  break;
-            case UI_STATUS_RUN:   label = "RUN   ";    color = GREEN;  break;
-            default:              label = "???";    color = WHITE;  break;
-        }
+    case UI_STATUS_STOP:
+        label = "STOP  ";
+        color = RED;
+        LED_SetRunStop(LED_RED);
+        break;
+
+    case UI_STATUS_WAIT:
+        label = "WAIT  ";
+        color = YELLOW;
+        LED_SetRunStop(LED_YELLOW);
+        break;
+
+    case UI_STATUS_TRIGD:
+        label = "TRIG'D";
+        color = GREEN;
+        LED_SetRunStop(LED_GREEN);
+        break;
+
+    case UI_STATUS_RUN:
+        label = "RUN   ";
+        color = GREEN;
+        LED_SetRunStop(LED_GREEN);
+        break;
+
+    default:
+        label = "???";
+        color = WHITE;
+        LED_SetRunStop(LED_OFF); // Meglio spegnere se lo stato è ignoto
+        break;
+}
 
         // Qui disegni sul TFT (avviene solo una volta per ogni cambio di stato)
         // tft_draw_status(label, color); 

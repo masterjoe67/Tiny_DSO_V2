@@ -19,7 +19,7 @@ int main(void) {
     uart_print("Inizializzo display...\r\n");
 
     keypad_init();
-    leds_init();
+    LED_Init();
  
     tft_init();
     tft_set_backlight(128);

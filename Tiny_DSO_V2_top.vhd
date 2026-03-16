@@ -1,10 +1,28 @@
---************************************************************************************************
--- Top entity for Tiny_DSO
--- Version 1.0 (Version for Intel)
--- Designed by Giovanni Legati
--- M.J.E. 2026
--- masterjoe67@hotmail.it
---************************************************************************************************
+----------------------------------------------------------------------------------
+-- Company:         M.J.E. (Digital Signal Electronics)
+-- Engineer:        Giovanni Legati
+-- 
+-- Create Date:     16.03.2026
+-- Design Name:     Zoe DSO - FPGA Core
+-- Module Name:     Top_Main - RTL
+-- Project Name:    Zoe Oscilloscope Project
+-- Target Devices:  Intel Cyclone IV E
+-- Tool Versions:   Quartus Prime 22.1+
+-- 
+-- Description: 
+--    Top-level module for the Zoe DSO. Handles ADC clock distribution via 
+--    ALTDDIO_OUT and high-speed data acquisition.
+--
+-- Author:     Giovanni Legati M.J.E.
+-- Mail:  masterjoe67@hotmail.it
+-- Revision:
+--    Revision 1.8 - Initial release with ALTDDIO clock stability fix.
+-- 
+-- Additional Comments:
+--    This code is part of the Zoe DSO project. The clock distribution 
+--    logic has been enhanced to reduce jitter on ADC_A_CK and ADC_B_CK.
+--
+----------------------------------------------------------------------------------
 
 LIBRARY ieee;
 USE ieee.std_logic_1164.all; 
@@ -16,9 +34,6 @@ ENTITY Tiny_DSO_V2_top IS
 	(
 		CLOCK_50 :  IN  STD_LOGIC;
 		RX :  IN  STD_LOGIC;
-		ENC_A :  IN  STD_LOGIC;
-		ENC_B :  IN  STD_LOGIC;
-
 		
 		KEY :  IN  STD_LOGIC_VECTOR(0 TO 0);
 		KEY_ROWS :  IN  STD_LOGIC_VECTOR(4 DOWNTO 0);
@@ -54,10 +69,10 @@ ENTITY Tiny_DSO_V2_top IS
 		ENC_PAN_POS_B :  IN  STD_LOGIC;
 		ENC_PAN_POS_K :  IN  STD_LOGIC;
 		
-		ADC_miso :  IN  STD_LOGIC;
-		ADC_sclk :  OUT  STD_LOGIC;
-		ADC_cs_n :  OUT  STD_LOGIC;
-		ADC_mosi :  OUT  STD_LOGIC;
+--		ADC_miso :  IN  STD_LOGIC;
+--		ADC_sclk :  OUT  STD_LOGIC;
+--		ADC_cs_n :  OUT  STD_LOGIC;
+--		ADC_mosi :  OUT  STD_LOGIC;
 		-- Interfaccia Modulo ADC Canale A
 	  ADC_A           : in  std_logic_vector(11 downto 0); -- A1..12
 	  ADC_A_CK         : out std_logic;                     -- Clock A
@@ -86,7 +101,7 @@ COMPONENT top_avr_core_v8 PORT(
 	-- Port 
 	porta  : inout std_logic_vector(7 downto 0);
 	portb  : inout std_logic_vector(7 downto 0);
-	--portc  : inout std_logic_vector(7 downto 0);
+
 	-- UART 
 	rxd    : in    std_logic;
 	txd    : out   std_logic;
@@ -101,30 +116,23 @@ COMPONENT top_avr_core_v8 PORT(
 	INTx   : in    std_logic_vector(7 downto 0); 
 	INT0	 : in    std_logic;
 
-	-- JTAG related signals
-	TMS    : in    std_logic;
-	TCK	 : in    std_logic;
-	TDI    : in    std_logic;
-	TDO    : out   std_logic;
-	TRSTn  : in    std_logic; -- Optional JTAG input
-	
-		  -- Interfaccia Modulo ADC Canale A
-        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
-        ACK         : out std_logic;                     -- Clock A
-        ORA         : in  std_logic;                     -- Out of Range A
-        
-        -- Interfaccia Modulo ADC Canale B
-        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
-        BCK         : out std_logic;                     -- Clock B
-        ORB         : in  std_logic;                     -- Out of Range B
-	
+	-- Interfaccia Modulo ADC Canale A
+	DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+	ACK         : out std_logic;                     -- Clock A
+	ORA         : in  std_logic;                     -- Out of Range A
+
+	-- Interfaccia Modulo ADC Canale B
+	DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+	BCK         : out std_logic;                     -- Clock B
+	ORB         : in  std_logic;                     -- Out of Range B
+
 	--keys		: in    std_logic_vector(7 downto 0);
 	key_rows 		: in  std_logic_vector(4 downto 0); -- 5 INGRESSI (pull-up)
 	key_cols 		: out std_logic_vector(2 downto 0); -- 3 USCITE
-	
+
 	--Encoder
 	s_enc_a        : in  std_logic_vector(6 downto 0);
-   s_enc_b        : in  std_logic_vector(6 downto 0);
+	s_enc_b        : in  std_logic_vector(6 downto 0);
 	enc_keys_i     : in  std_logic_vector(3 downto 0)
 	
 	);
@@ -133,7 +141,7 @@ END COMPONENT;
 
 COMPONENT sine_50hz_hex 
     generic (
-        CLK_FREQ : integer := 50000000 -- Il tuo clock (es. 50MHz)
+        CLK_FREQ : integer := 50000000 
     );
     port (
         clk     : in  std_logic;
@@ -168,7 +176,6 @@ end COMPONENT;
 COMPONENT pll_master
 	PORT(inclk0 : IN STD_LOGIC;
 		 c0 : OUT STD_LOGIC;
-		 c1 : OUT STD_LOGIC;
 		 c2 : OUT STD_LOGIC
 	);
 END COMPONENT;
@@ -178,6 +185,16 @@ COMPONENT PLL_GEN
 	(
 		inclk0		: IN STD_LOGIC  := '0';
 		c0		: OUT STD_LOGIC 
+	);
+END COMPONENT;
+
+COMPONENT clk_adc_buffer
+	PORT
+	(
+		datain_h		: IN STD_LOGIC_VECTOR (1 DOWNTO 0);
+		datain_l		: IN STD_LOGIC_VECTOR (1 DOWNTO 0);
+		outclock		: IN STD_LOGIC ;
+		dataout		: OUT STD_LOGIC_VECTOR (1 DOWNTO 0)
 	);
 END COMPONENT;
 
@@ -194,80 +211,79 @@ SIGNAL	enc_keys_i : std_logic_vector(3 downto 0);
 
 BEGIN 
 
-
+-- Istanza del buffer DDIO per i clock degli ADC
+clk_output_bridge : component clk_adc_buffer 
+    port map (
+        datain_h   => "11",              -- Entrambi i canali a '1' sul fronte alto
+        datain_l   => "00",              -- Entrambi i canali a '0' sul fronte basso
+        outclock   => clk0,  
+        dataout(0) => ADC_A_CK,          -- Pin fisico per ADC A
+        dataout(1) => ADC_B_CK           -- Pin fisico per ADC B
+    );
 
 
 b2v_inst : top_avr_core_v8
 PORT MAP(nrst => nrst,
-		 clk => clk0,
-		 clk_adc => clk_adc,
-		 clk_spi => clk_spi,
-		 rxd => rxd,
-		 key_rows => KEY_ROWS,
-		 key_cols => KEY_COLS,
-		 enc_keys_i => enc_keys_i,
-		 
-		 porta => porta,
-		 portb => portb,
-		 txd => TX,
-		 
-		 	-- TFT SPI
-		 tft_sclk    => tft_sclk,
-		 tft_mosi    => tft_mosi,
-		 tft_cs      => tft_cs,
-		 tft_dc      => tft_dc,
-		 tft_rst     => tft_rst,
-		 tft_backlight => tft_backlight,
-		 
---		 ADC_miso => ADC_miso,
---		 ADC_sclk => ADC_sclk,
---		 ADC_cs_n => ADC_cs_n,
---		 ADC_mosi => ADC_mosi,
+	clk => clk0,
+	clk_adc => clk_adc,
+	clk_spi => clk_spi,
+	rxd => rxd,
+	key_rows => KEY_ROWS,
+	key_cols => KEY_COLS,
+	enc_keys_i => enc_keys_i,
 
-		  DATA_A        => ADC_A, -- A1..12
-		  ACK      => ADC_A_CK,                     -- Clock A
-		  ORA      => ADC_A_OR,                     -- Out of Range A
-		  
-		  -- Interfaccia Modulo ADC Canale B
-		  DATA_B       => ADC_B, -- B1..12
-		  BCK     => ADC_B_CK,                     -- Clock B
-		  ORB     => ADC_B_OR,                     -- Out of Range B
-		 
-		 -- JTAG related signals
-		 TMS    => '0',
-		 TCK	  => '0',
-		 TDI     => '0',
-		 TRSTn  => '0',
-		 
-		 INTx   => (others => '0'),
-		 INT0	  => '0',
-		 
-		 s_enc_a => s_enc_a,
-		 s_enc_b => s_enc_b
+	porta => porta,
+	portb => portb,
+	txd => TX,
+
+	-- TFT SPI
+	tft_sclk    => tft_sclk,
+	tft_mosi    => tft_mosi,
+	tft_cs      => tft_cs,
+	tft_dc      => tft_dc,
+	tft_rst     => tft_rst,
+	tft_backlight => tft_backlight,
+
+	DATA_A        => ADC_A, -- A1..12
+	ACK      => open,                     -- Clock A
+	ORA      => ADC_A_OR,                 -- Out of Range A
+
+	-- Interfaccia Modulo ADC Canale B
+	DATA_B       => ADC_B, -- B1..12
+	BCK     => open,                     -- Clock B
+	ORB     => ADC_B_OR,                 -- Out of Range B
+
+
+	INTx   => (others => '0'),
+	INT0	  => '0',
+
+	s_enc_a => s_enc_a,
+	s_enc_b => s_enc_b
 );
 
 
 b2v_inst1 : pll_master
-PORT MAP(inclk0 => CLOCK_50,
-		 c0 => clk0,
-		 c1 => clk_adc,
-		 c2 => clk_spi);
+PORT MAP(
+	inclk0 => CLOCK_50,
+	c0 => clk0,
+	c2 => clk_spi);
 		 
 pll_generator_inst : pll_gen
-PORT MAP(inclk0 => CLOCK_50,
-		 c0 => clk_gen);
+PORT MAP(
+	inclk0 => CLOCK_50,
+	c0 => clk_gen);
 
 		 
 b2v_inst3 : sine_50hz_hex 
-    generic map(
-        CLK_FREQ => 50000000
-    )
-    port map(
-        clk     => clk_gen,
-        rst_n   => nrst,
-        pwm_out  => SINE_OUT
-    );
-	 
+generic map(
+	CLK_FREQ => 50000000
+	)
+port map(
+	clk     => clk_gen,
+	rst_n   => nrst,
+	pwm_out  => SINE_OUT);
+	
+ 
 b2v_inst4 : triangle_50hz_pwm 
     generic map(
         CLK_FREQ => 50000000

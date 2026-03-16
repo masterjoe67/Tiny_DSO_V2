@@ -1,24 +1,25 @@
-// leds.h
-#ifndef LEDS_H
-#define LEDS_H
-#include <stdbool.h>
+#ifndef LED_CONTROL_H
+#define LED_CONTROL_H
 
-#define led_carrier 0
-#define led_mod     1
-#define led_mag     2
-#define led_dead    3
-#define led_encoder 4
+#include <avr/io.h>
 
-void leds_init(void);
-void leds_field_carrier_on(void);
-void leds_field_carrier_off(void);
-void leds_field_mod_on(void);
-void leds_field_mod_off(void);
-void leds_field_mag_on(void);
-void leds_field_mag_off(void);
-void leds_field_dead_on(void);
-void leds_field_dead_off(void);
-void leds_output_set(bool on);
+// Definizioni Pin
+#define LED_CH1_PIN    PA0
+#define LED_CH2_PIN    PA1
+#define LED_RS_GREEN   PA2
+#define LED_RS_RED     PA3
+
+// Stati per il LED bicolor
+typedef enum {
+    LED_OFF = 0,
+    LED_RED,
+    LED_GREEN,
+    LED_YELLOW
+} RS_Color;
+
+// Funzioni
+void LED_Init(void);
+void LED_SetCH(uint8_t ch, uint8_t state); // 1 per CH1, 2 per CH2
+void LED_SetRunStop(RS_Color color);
+
 #endif
-
-

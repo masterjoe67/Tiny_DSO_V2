@@ -12,45 +12,35 @@ use work.AVRuCPackage.all;
 
 entity oscilloscope_top is
     port(
-        clk           : in  std_logic;
-		  clk_adc   	 : in    std_logic;
-        rst_n         : in  std_logic;
+		clk           : in  std_logic;
+		rst_n         : in  std_logic;
 
---        -- SPI ADC
---        sclk          : out std_logic;
---        cs_n          : out std_logic;
---        miso          : in  std_logic;
---        mosi          : out std_logic;
-		  
-		  -- Interfaccia Modulo ADC Canale A
-        DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
-        ACK         : out std_logic;                     -- Clock A
-        ORA         : in  std_logic;                     -- Out of Range A
-        
-        -- Interfaccia Modulo ADC Canale B
-        DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
-        BCK         : out std_logic;                     -- Clock B
-        ORB         : in  std_logic;                     -- Out of Range B
+		-- Interfaccia Modulo ADC Canale A
+		DATA_A           : in  std_logic_vector(11 downto 0); -- A1..12
+		ACK         : out std_logic;                     -- Clock A
+		ORA         : in  std_logic;                     -- Out of Range A
 
-		  
-		  
+		-- Interfaccia Modulo ADC Canale B
+		DATA_B           : in  std_logic_vector(11 downto 0); -- B1..12
+		BCK         : out std_logic;                     -- Clock B
+		ORB         : in  std_logic;                     -- Out of Range B
 
-        -- MMIO interface
-        iore          : in  std_logic;
-        mmio_addr     : in  std_logic_vector(6 downto 0);
-        mmio_wdata    : in  std_logic_vector(7 downto 0);
-        mmio_we       : in  std_logic;
-        mmio_rdata    : out std_logic_vector(7 downto 0);
-        out_en        : out std_logic;
-		  tb_view_full_sign : out std_logic_vector(15 downto 0);
-		  
-		  -- RAM interface
-		  bram_ce          : in  std_logic;
-		  mem_ramadr		 : in std_logic_vector(15 downto 0);
-		  ramre				 : in  std_logic;
-		  ramwe				 : in  std_logic;
-		  data_in			 : in std_logic_vector(7 downto 0);
-		  data_out			 : out std_logic_vector(7 downto 0)
+		-- MMIO interface
+		iore          : in  std_logic;
+		mmio_addr     : in  std_logic_vector(6 downto 0);
+		mmio_wdata    : in  std_logic_vector(7 downto 0);
+		mmio_we       : in  std_logic;
+		mmio_rdata    : out std_logic_vector(7 downto 0);
+		out_en        : out std_logic;
+		tb_view_full_sign : out std_logic_vector(15 downto 0);
+
+		-- RAM interface
+		bram_ce          : in  std_logic;
+		mem_ramadr		 : in std_logic_vector(15 downto 0);
+		ramre				 : in  std_logic;
+		ramwe				 : in  std_logic;
+		data_in			 : in std_logic_vector(7 downto 0);
+		data_out			 : out std_logic_vector(7 downto 0)
 		  
 
     );
@@ -400,36 +390,7 @@ begin
         end if;
     end if;
 end process;
---process(clk, rst_n)
---begin
---    if rst_n = '0' then
---        gate_count <= (others => '0');
---        accumulator <= (others => '0');
---        freq_period_reg <= (others => '0');
---    elsif rising_edge(clk) then
---        -- Incremento costante dell'accumulatore
---        if accumulator /= x"FFFFFFFF" then
---            accumulator <= accumulator + 1;
---        end if;
---
---        -- Logica di cattura al colpo di trigger
---        if trig_hit_raw = '1' then
---            if gate_count >= 63 then 
---                freq_period_reg <= accumulator; -- LATCH del periodo totale
---                accumulator <= (others => '0'); -- Reset sincronizzato
---                gate_count <= (others => '0');
---            else
---                gate_count <= gate_count + 1;
---            end if;
---        end if;
---
---        -- Watchdog / Timeout (se il segnale sparisce)
---        if accumulator = x"FFFFFFFF" then
---            gate_count <= (others => '0');
---            freq_period_reg <= (others => '0');
---        end if;
---    end if;
---end process;
+
 
 -- 2. PROCESSO GENERAZIONE TRIGGER HIT (Pulizia Glitch)
 process(clk, rst_n)

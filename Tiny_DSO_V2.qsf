@@ -173,7 +173,6 @@ set_global_assignment -name VHDL_FILE SignalSource/square_50hz_gen.vhd
 set_location_assignment PIN_B16 -to SQUARE_OUT
 set_location_assignment PIN_C16 -to TRIANGLE_OUT
 set_location_assignment PIN_D16 -to SINE_OUT
-set_global_assignment -name SIGNALTAP_FILE stp1.stp
 set_location_assignment PIN_B6 -to ADC_B_CK
 set_location_assignment PIN_D3 -to ADC_B_OR
 set_location_assignment PIN_A5 -to ADC_B[1]
@@ -215,4 +214,13 @@ set_global_assignment -name OUTPUT_IO_TIMING_NEAR_END_VMEAS "HALF VCCIO" -fall
 set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -rise
 set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -fall
 set_global_assignment -name FORCE_CONFIGURATION_VCCIO ON
+set_location_assignment PIN_E11 -to porta[0]
+set_location_assignment PIN_C11 -to porta[1]
+set_location_assignment PIN_A12 -to porta[2]
+set_location_assignment PIN_D12 -to porta[3]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to porta[1]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to porta[2]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to porta[3]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to porta[0]
+set_global_assignment -name QIP_FILE clk_adc_buffer.qip
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

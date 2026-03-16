@@ -14,11 +14,13 @@
 --https://fpgasoftware.intel.com/eula.
 
 
-component PLL_Master
-	PORT
-	(
-		inclk0		: IN STD_LOGIC  := '0';
-		c0		: OUT STD_LOGIC ;
-		c2		: OUT STD_LOGIC 
-	);
-end component;
+FUNCTION clk_adc_buffer 
+(
+	datain_h[1..0],
+	datain_l[1..0],
+	outclock
+)
+
+RETURNS (
+	dataout[1..0]
+);
