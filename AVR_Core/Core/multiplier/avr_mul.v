@@ -1,9 +1,19 @@
-//**********************************************************************************************
-// Multiplier for the AVR Core
-// Version 0.3
-// Modified 10.01.2007
-// Designed by Ruslan Lepetenok
-//**********************************************************************************************
+//----------------------------------------------------------------------------------
+//-- Project:         Zoe DSO - AVR Soft Core
+//-- Engineer:        Giovanni Legati M.J.E.
+//-- 
+//-- Description:     VHDL implementation of the AVR Soft Core architecture.
+//--                  This module executes the main control logic for the Zoe 
+//--                  oscilloscope, managing UI, triggers, and data processing.
+//--
+//-- Original Author: Ruslan Lepetenok
+//-- Modified by:     Giovanni Legati M.J.E.
+//--
+//-- Revision:        16/03/2026
+//--
+//-- Module:          Multiplier for the AVR Core
+//----------------------------------------------------------------------------------
+
 
 `timescale 1 ns / 1 ns
 

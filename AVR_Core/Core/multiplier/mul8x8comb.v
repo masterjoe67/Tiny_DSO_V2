@@ -1,11 +1,19 @@
-//****************************************************************************************************
-// 8x8 Combinatorial Multiplier for AVR core
-// Designed by Ruslan Lepetenok
-// Version 0.8
-// Modified 10.01.2007
-// Compatible with Synopsys
-// Modified 18.08.12 (Verilog version) -> LINT
-//****************************************************************************************************
+//----------------------------------------------------------------------------------
+//-- Project:         Zoe DSO - AVR Soft Core
+//-- Engineer:        Giovanni Legati M.J.E.
+//-- 
+//-- Description:     VHDL implementation of the AVR Soft Core architecture.
+//--                  This module executes the main control logic for the Zoe 
+//--                  oscilloscope, managing UI, triggers, and data processing.
+//--
+//-- Original Author: Ruslan Lepetenok
+//-- Modified by:     Giovanni Legati M.J.E.
+//--
+//-- Revision:        16/03/2026
+//--
+//-- Module:          8x8 Combinatorial Multiplier for AVR core
+//----------------------------------------------------------------------------------
+
 
 `timescale 1 ns / 1 ns
 

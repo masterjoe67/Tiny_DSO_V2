@@ -1,26 +1,27 @@
 <?xml version='1.0' encoding='UTF-8' standalone='yes'?>
 <WORKSPACE>
- <FRAME activeWindow="0">
+ <FRAME activeWindow="2">
   <PLACEMENT>01d9d0cb00030000fffffffffffffff80000078000000438000003c20000002d0000076f0000042a0000000002000000078000000000000000170000077f00000437</PLACEMENT>
-  <WINDOW index="0" module="ISIS" mode="00050a10" type="default"/>
-  <WINDOW index="0" module="ARES" mode="00060a01" type="default"/>
+  <WINDOW mode="00050a10" type="default" module="ISIS" index="0"/>
+  <WINDOW mode="00060a03" type="default" module="ARES" index="0"/>
+  <WINDOW mode="00060a03" type="default" module="STARTUP" index="0"/>
  </FRAME>
  <MODULE name="ARES">
-  <editor gridmajor="2540000" gridmode="2" metric="0" flipped="0" orgmode="0" gridminor="127000" snaprange="63500" zoom="-1" snap="127000" scale="348" snapidx="3" xcursor="32">
-   <centre y="-2906443" x="-4445000"/>
+  <editor gridmode="2" xcursor="32" orgmode="0" zoom="-1" snapidx="3" metric="0" snaprange="63500" snap="127000" scale="336" gridminor="127000" gridmajor="2540000" flipped="0">
+   <centre y="-256515" x="-1143000"/>
    <origin y="0" x="0"/>
-   <world y2="12700000" x2="15240000" y1="-12700000" x1="-15240000"/>
+   <world x2="15240000" x1="-15240000" y1="-12700000" y2="12700000"/>
+  </editor>
+ </MODULE>
+ <MODULE name="ISIS">
+  <editor gridmode="2" xcursor="32" orgmode="0" zoom="0" snapidx="1" metric="0" snaprange="63500" snap="127000" scale="283" gridminor="127000" gridmajor="2540000" flipped="0">
+   <centre y="4572000" x="-1651000"/>
+   <origin y="0" x="0"/>
+   <world x2="19050000" x1="-19050000" y1="-12700000" y2="12700000"/>
   </editor>
  </MODULE>
  <MODULE name="VSMEDIT">
   <EDITOR/>
- </MODULE>
- <MODULE name="ISIS">
-  <editor gridmajor="2540000" gridmode="2" metric="0" flipped="0" orgmode="0" gridminor="127000" snaprange="63819" zoom="0" snap="127000" scale="199" snapidx="1" xcursor="32">
-   <centre y="-5080000" x="2540000"/>
-   <origin y="0" x="0"/>
-   <world y2="12700000" x2="19050000" y1="-12700000" x1="-19050000"/>
-  </editor>
  </MODULE>
  <MODULE name="VSMDEBUG">
   <PWI/>

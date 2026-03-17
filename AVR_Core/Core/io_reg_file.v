@@ -1,15 +1,19 @@
-//************************************************************************************************
-// Internal I/O registers (implemented inside the core) decoder/multiplexer 
-// for AVR core
-// Version 2.1 (Special version for the JTAG OCD)
-// Designed by Ruslan Lepetenok
-// Modified 08.01.2007
-// EIND register is added 
-// std_library was added
-// Converted to verilog
-// Modified 03.07.12
-// Modifies 18.08.12 Verilog Lint
-//************************************************************************************************
+//----------------------------------------------------------------------------------
+//-- Project:         Zoe DSO - AVR Soft Core
+//-- Engineer:        Giovanni Legati M.J.E.
+//-- 
+//-- Description:     VHDL implementation of the AVR Soft Core architecture.
+//--                  This module executes the main control logic for the Zoe 
+//--                  oscilloscope, managing UI, triggers, and data processing.
+//--
+//-- Original Author: Ruslan Lepetenok
+//-- Modified by:     Giovanni Legati M.J.E.
+//--
+//-- Revision:        16/03/2026
+//--
+//-- Module:          Internal I/O registers (implemented inside the core) decoder/multiplexer
+//----------------------------------------------------------------------------------
+
 
 `timescale 1 ns / 1 ns
 

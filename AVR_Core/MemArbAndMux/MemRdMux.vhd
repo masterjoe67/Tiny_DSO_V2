@@ -1,9 +1,18 @@
---************************************************************************************************
---  
---  Version 0.1 
---  Designed by Ruslan Lepetenok 
---  Modified 24.07.2005
---************************************************************************************************
+----------------------------------------------------------------------------------
+-- Project:         Zoe DSO - AVR Soft Core
+-- Engineer:        Giovanni Legati M.J.E.
+-- 
+-- Description:     VHDL implementation of the AVR Soft Core architecture.
+--                  This module executes the main control logic for the Zoe 
+--                  oscilloscope, managing UI, triggers, and data processing.
+--
+-- Original Author: Ruslan Lepetenok
+-- Modified by:     Giovanni Legati M.J.E.
+--
+-- Revision:        16/03/2026
+--
+-- Module:          Memory read mux
+----------------------------------------------------------------------------------
 
 library IEEE;
 use IEEE.std_logic_1164.all;
@@ -11,10 +20,10 @@ use IEEE.std_logic_1164.all;
 use WORK.MemAccessCtrlPack.all;
 
 entity MemRdMux is port(
-	                    slv_outs  : in SlavesOutBus_Type;
-						ram_sel   : in  std_logic;                    -- Data RAM selection(optional input)
-	                    ram_dout  : in  std_logic_vector(7 downto 0); -- Data memory output
-						dout      : out std_logic_vector(7 downto 0)  -- Data output
+	slv_outs  : in SlavesOutBus_Type;
+	ram_sel   : in  std_logic;                    -- Data RAM selection(optional input)
+	ram_dout  : in  std_logic_vector(7 downto 0); -- Data memory output
+	dout      : out std_logic_vector(7 downto 0)  -- Data output
 						);
 end MemRdMux;
 

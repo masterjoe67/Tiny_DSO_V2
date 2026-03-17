@@ -1,13 +1,19 @@
-//************************************************************************************************
-// "Bit processor" for AVR core
-// Version 1.41(Special version for the JTAG OCD)
-// Designed by Ruslan Lepetenok
-// Modified 07.11.2011
-// Unused inputs(sreg_bit_num[2..0],idc_sbi,idc_cbi,idc_bld) was removed.
-// std_library was added
-// Converted to Verilog
-// Modified 18.08.12
-//************************************************************************************************
+//----------------------------------------------------------------------------------
+//-- Project:         Zoe DSO - AVR Soft Core
+//-- Engineer:        Giovanni Legati M.J.E.
+//-- 
+//-- Description:     VHDL implementation of the AVR Soft Core architecture.
+//--                  This module executes the main control logic for the Zoe 
+//--                  oscilloscope, managing UI, triggers, and data processing.
+//--
+//-- Original Author: Ruslan Lepetenok
+//-- Modified by:     Giovanni Legati M.J.E.
+//--
+//-- Revision:        16/03/2026
+//--
+//-- Module:          "Bit processor" for AVR core
+//----------------------------------------------------------------------------------
+
 
 `timescale 1 ns / 1 ns
 

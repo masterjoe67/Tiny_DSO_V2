@@ -1,10 +1,20 @@
---************************************************************************************************
--- Component declarations for AVR core
--- Version 1.52? (Special version for fhe JTAG OCD)
--- Designed by Ruslan Lepetenok 
--- Modified 31.06.2006
--- PM clock enable was added
---************************************************************************************************
+----------------------------------------------------------------------------------
+-- Project:         Zoe DSO - AVR Soft Core
+-- Engineer:        Giovanni Legati M.J.E.
+-- 
+-- Description:     VHDL implementation of the AVR Soft Core architecture.
+--                  This module executes the main control logic for the Zoe 
+--                  oscilloscope, managing UI, triggers, and data processing.
+--
+-- Original Author: Ruslan Lepetenok
+-- Modified by:     Giovanni Legati M.J.E.
+--
+-- Revision:        16/03/2026
+--
+-- Module:          Component declarations for AVR core
+-- 					  PM clock enable was added
+----------------------------------------------------------------------------------
+
 
 library IEEE;
 use IEEE.std_logic_1164.all;

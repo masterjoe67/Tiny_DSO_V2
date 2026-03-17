@@ -1,13 +1,19 @@
-//************************************************************************************************
-//  ALU(internal module) for AVR core
-//	Version 1.2
-//  Designed by Ruslan Lepetenok 
-//	Modified 02.08.2003 
-// (CPC/SBC/SBCI Z-flag bug found)
-//  H-flag with NEG instruction found
-// Modified 26.05.2012 (Verilog version)
-// Modified 18.08.12 Verilog Lint
-//************************************************************************************************
+//----------------------------------------------------------------------------------
+//-- Project:         Zoe DSO - AVR Soft Core
+//-- Engineer:        Giovanni Legati M.J.E.
+//-- 
+//-- Description:     VHDL implementation of the AVR Soft Core architecture.
+//--                  This module executes the main control logic for the Zoe 
+//--                  oscilloscope, managing UI, triggers, and data processing.
+//--
+//-- Original Author: Ruslan Lepetenok
+//-- Modified by:     Giovanni Legati M.J.E.
+//--
+//-- Revision:        16/03/2026
+//--
+//-- Module:          ALU(internal module) for AVR core
+//----------------------------------------------------------------------------------
+
 
 `timescale 1 ns / 1 ns
 
